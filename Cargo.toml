@@ -1,0 +1,27 @@
+[package]
+name = "psst"
+version = "0.1.0"
+edition = "2021"
+description = "AI coding tool usage monitor & notifier"
+license = "MIT"
+
+[dependencies]
+tokscale-core = { path = "tokscale-main/crates/tokscale-core" }
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", features = ["json"] }
+axum = "0.8"
+tower-http = { version = "0.6", features = ["fs", "cors"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+clap = { version = "4", features = ["derive"] }
+notify-rust = "4"
+web-push = "0.11"
+chrono = { version = "0.4", features = ["serde"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "0.2"
+anyhow = "1"
+async-trait = "0.1"
+uuid = { version = "1", features = ["v4"] }
+dirs = "6"
