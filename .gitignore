@@ -1,0 +1,19 @@
+# Dev log (personal notes, not for open source)
+dev-log.md
+
+# Build artifacts
+/target/
+**/*.rs.bk
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment / secrets
+.env
+*.pem
