@@ -1,6 +1,7 @@
 //! Claude OAuth quota provider.
 //!
-//! Reads `~/.claude/.credentials.json` for an OAuth bearer token, then calls
+//! Reads OAuth token from macOS Keychain (service: "Claude Code-credentials"),
+//! falling back to `~/.claude/.credentials.json`, then calls
 //! `GET https://api.anthropic.com/api/oauth/usage` to retrieve the current
 //! five-hour and seven-day request windows.
 
@@ -9,23 +10,83 @@ use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use serde::Deserialize;
 use std::path::PathBuf;
+use std::process::Command;
 
 use super::{QuotaInfo, QuotaProvider, QuotaWindow};
 
 // ---------------------------------------------------------------------------
-// Credentials
+// Credentials — JSON structure stored in Keychain or file
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Deserialize)]
-struct ClaudeCredentials {
-    #[serde(rename = "claudeAiOauthToken")]
-    claude_ai_oauth_token: Option<String>,
-    /// Fallback: some versions store the token under a different key.
-    #[serde(rename = "oauth_token")]
-    oauth_token: Option<String>,
+struct CredentialsFile {
+    #[serde(rename = "claudeAiOauth")]
+    claude_ai_oauth: Option<OAuthBlock>,
 }
 
-fn read_oauth_token(home_dir: &str) -> Result<String> {
+#[derive(Debug, Deserialize)]
+struct OAuthBlock {
+    #[serde(rename = "accessToken")]
+    access_token: Option<String>,
+}
+
+// ---------------------------------------------------------------------------
+// Token retrieval: Keychain first, file fallback
+// ---------------------------------------------------------------------------
+
+/// Read OAuth access token from macOS Keychain.
+fn read_token_from_keychain() -> Result<String> {
+    let output = Command::new("security")
+        .args([
+            "find-generic-password",
+            "-s", "Claude Code-credentials",
+            "-g",
+        ])
+        .output()
+        .map_err(|e| anyhow!("Failed to run `security` command: {}", e))?;
+
+    if !output.status.success() {
+        bail!("No Claude Code credentials found in macOS Keychain");
+    }
+
+    // `security -g` prints the password to stderr in the format:
+    // password: "{ JSON content }"
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    // Extract the JSON from the password field
+    let json_str = extract_password_json(&stderr)
+        .ok_or_else(|| anyhow!("Could not parse password from Keychain output"))?;
+
+    let creds: CredentialsFile = serde_json::from_str(&json_str)
+        .map_err(|e| anyhow!("Failed to parse Keychain credentials JSON: {}", e))?;
+
+    creds
+        .claude_ai_oauth
+        .and_then(|oauth| oauth.access_token)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| anyhow!("No accessToken in Keychain credentials"))
+}
+
+/// Extract JSON string from `security -g` stderr output.
+/// The password line looks like: password: "{ ... }" or password: 0x...
+fn extract_password_json(stderr: &str) -> Option<String> {
+    for line in stderr.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("password: \"") {
+            // Remove 'password: "' prefix and trailing '"'
+            let inner = &trimmed["password: \"".len()..];
+            if let Some(json) = inner.strip_suffix('"') {
+                // Unescape the string (security command escapes quotes)
+                let unescaped = json.replace("\\\"", "\"").replace("\\\\", "\\");
+                return Some(unescaped);
+            }
+        }
+    }
+    None
+}
+
+/// Read OAuth token from ~/.claude/.credentials.json (legacy/fallback).
+fn read_token_from_file(home_dir: &str) -> Result<String> {
     let path = PathBuf::from(home_dir)
         .join(".claude")
         .join(".credentials.json");
@@ -38,14 +99,37 @@ fn read_oauth_token(home_dir: &str) -> Result<String> {
         )
     })?;
 
-    let creds: ClaudeCredentials = serde_json::from_str(&content)
+    let creds: CredentialsFile = serde_json::from_str(&content)
         .map_err(|e| anyhow!("Failed to parse Claude credentials: {}", e))?;
 
     creds
-        .claude_ai_oauth_token
-        .or(creds.oauth_token)
+        .claude_ai_oauth
+        .and_then(|oauth| oauth.access_token)
         .filter(|s| !s.is_empty())
-        .ok_or_else(|| anyhow!("No OAuth token found in ~/.claude/.credentials.json"))
+        .ok_or_else(|| anyhow!("No accessToken in credentials file"))
+}
+
+/// Read OAuth token: try Keychain first, then file fallback.
+fn read_oauth_token(home_dir: &str) -> Result<String> {
+    match read_token_from_keychain() {
+        Ok(token) => {
+            tracing::debug!("Claude OAuth token read from macOS Keychain");
+            Ok(token)
+        }
+        Err(keychain_err) => {
+            tracing::debug!("Keychain read failed: {}, trying file fallback", keychain_err);
+            read_token_from_file(home_dir).map_err(|file_err| {
+                anyhow!(
+                    "Cannot read Claude OAuth token.\n\
+                     Keychain: {}\n\
+                     File fallback: {}\n\
+                     Please ensure Claude Code is logged in.",
+                    keychain_err,
+                    file_err
+                )
+            })
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -56,30 +140,40 @@ fn read_oauth_token(home_dir: &str) -> Result<String> {
 #[derive(Debug, Deserialize)]
 struct OAuthUsageResponse {
     #[serde(default)]
-    five_hour: Option<UsageWindow>,
+    five_hour: Option<UsageWindowResponse>,
     #[serde(default)]
-    seven_day: Option<UsageWindow>,
+    seven_day: Option<UsageWindowResponse>,
 }
 
 #[derive(Debug, Deserialize)]
-struct UsageWindow {
+struct UsageWindowResponse {
+    /// Utilization as a float 0.0 – 1.0 (newer API format)
+    utilization: Option<f64>,
+    /// Used count (older API format)
     used: Option<u64>,
+    /// Limit count (older API format)
     limit: Option<u64>,
-    /// ISO-8601 reset timestamp.
+    /// ISO-8601 reset timestamp (may be `reset_at` or `resets_at`)
     reset_at: Option<String>,
+    resets_at: Option<String>,
 }
 
-impl UsageWindow {
-    fn utilization(&self) -> f64 {
+impl UsageWindowResponse {
+    fn utilization_value(&self) -> f64 {
+        // Prefer direct utilization field, fallback to used/limit ratio
+        if let Some(u) = self.utilization {
+            return u;
+        }
         match (self.used, self.limit) {
             (Some(used), Some(limit)) if limit > 0 => used as f64 / limit as f64,
             _ => 0.0,
         }
     }
 
-    fn resets_at(&self) -> Option<DateTime<Utc>> {
-        self.reset_at
+    fn reset_time(&self) -> Option<DateTime<Utc>> {
+        self.resets_at
             .as_deref()
+            .or(self.reset_at.as_deref())
             .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
             .map(|dt| dt.with_timezone(&Utc))
     }
@@ -118,7 +212,7 @@ impl QuotaProvider for ClaudeQuotaProvider {
             .client
             .get(USAGE_URL)
             .bearer_auth(&token)
-            .header("anthropic-version", "2023-06-01")
+            .header("anthropic-beta", "oauth-2025-04-20")
             .send()
             .await
             .map_err(|e| anyhow!("Network error fetching Claude quota: {}", e))?;
@@ -127,20 +221,19 @@ impl QuotaProvider for ClaudeQuotaProvider {
 
         if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
             bail!(
-                "Claude quota API returned 429 – rate limited. \
-                 The quota check itself is being throttled; try again later."
+                "Claude quota API returned 429 – rate limited. Will retry next cycle."
             );
         }
 
         if status == reqwest::StatusCode::UNAUTHORIZED {
             bail!(
-                "Claude quota API returned 401 – OAuth token is invalid or expired. \
-                 Please re-authenticate with `claude login`."
+                "Claude OAuth token expired or invalid. Please run `claude login` to re-authenticate."
             );
         }
 
         if !status.is_success() {
-            bail!("Claude quota API returned unexpected status: {}", status);
+            let body_text = response.text().await.unwrap_or_default();
+            bail!("Claude quota API returned {}: {}", status, body_text);
         }
 
         let body: OAuthUsageResponse = response
@@ -153,25 +246,24 @@ impl QuotaProvider for ClaudeQuotaProvider {
         if let Some(w) = &body.five_hour {
             windows.push(QuotaWindow {
                 name: "five_hour".to_string(),
-                utilization: w.utilization(),
-                resets_at: w.resets_at().or_else(|| {
-                    // Fallback: 5 hours from now if reset_at not provided.
+                utilization: w.utilization_value(),
+                resets_at: w.reset_time().or_else(|| {
                     Some(Utc::now() + Duration::hours(5))
                 }),
                 used_tokens: None,
-                used_count: w.used.map(|u| u as u64),
+                used_count: w.used,
             });
         }
 
         if let Some(w) = &body.seven_day {
             windows.push(QuotaWindow {
                 name: "seven_day".to_string(),
-                utilization: w.utilization(),
-                resets_at: w.resets_at().or_else(|| {
+                utilization: w.utilization_value(),
+                resets_at: w.reset_time().or_else(|| {
                     Some(Utc::now() + Duration::days(7))
                 }),
                 used_tokens: None,
-                used_count: w.used.map(|u| u as u64),
+                used_count: w.used,
             });
         }
 
