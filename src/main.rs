@@ -8,6 +8,7 @@ use psst::config::Config;
 use psst::notifiers::{desktop::DesktopNotifier, serverchan::ServerChanNotifier, telegram::TelegramNotifier, Dispatcher, Notifier};
 use psst::scheduler::Scheduler;
 use psst::state::AppState;
+use psst::web;
 
 // ---------------------------------------------------------------------------
 // CLI definition
@@ -138,7 +139,18 @@ async fn cmd_run() -> Result<()> {
     let dispatcher = build_dispatcher(&config);
     let home_dir = home_dir_str()?;
 
-    let scheduler = Scheduler::new(config, state_path, state, dispatcher, home_dir);
+    let scheduler = Scheduler::new(config.clone(), state_path, state, dispatcher, home_dir);
+
+    let shared_state = scheduler.shared_state();
+    let access_token = { shared_state.lock().await.access_token.clone() };
+    let web_bind = config.server.bind.clone();
+    tokio::spawn(async move {
+        let server = web::WebServer::new(web_bind, shared_state, access_token);
+        if let Err(e) = server.run().await {
+            tracing::error!("Web server error: {}", e);
+        }
+    });
+
     scheduler.run().await;
 
     Ok(())
