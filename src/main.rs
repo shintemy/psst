@@ -4,11 +4,20 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use tracing::info;
 
+use std::sync::Arc;
+
 use psst::config::Config;
-use psst::notifiers::{desktop::DesktopNotifier, serverchan::ServerChanNotifier, telegram::TelegramNotifier, Dispatcher, Notifier};
+use psst::notifiers::{
+    desktop::DesktopNotifier,
+    serverchan::ServerChanNotifier,
+    telegram::TelegramNotifier,
+    web_push_notifier::WebPushNotifier,
+    Dispatcher, Notifier,
+};
 use psst::scheduler::Scheduler;
 use psst::state::AppState;
 use psst::web;
+use tokio::sync::Mutex;
 
 // ---------------------------------------------------------------------------
 // CLI definition
@@ -58,7 +67,11 @@ fn home_dir_str() -> Result<String> {
         .map(|p| p.to_string_lossy().to_string())
 }
 
-fn build_dispatcher(config: &Config) -> Dispatcher {
+fn build_dispatcher(config: &Config, state_arc: Arc<Mutex<AppState>>) -> Dispatcher {
+    let vapid_key_path = psst_config_dir()
+        .map(|d| d.join("vapid_private.pem").to_string_lossy().to_string())
+        .unwrap_or_else(|_| String::from("vapid_private.pem"));
+
     let notifiers: Vec<Box<dyn Notifier>> = vec![
         Box::new(DesktopNotifier::new(config.notifications.desktop)),
         Box::new(TelegramNotifier::new(
@@ -69,6 +82,11 @@ fn build_dispatcher(config: &Config) -> Dispatcher {
         Box::new(ServerChanNotifier::new(
             config.notifications.serverchan.send_key.clone(),
             config.notifications.serverchan.enabled,
+        )),
+        Box::new(WebPushNotifier::new(
+            config.notifications.web_push.enabled,
+            state_arc,
+            vapid_key_path,
         )),
     ];
     Dispatcher::new(notifiers)
@@ -109,6 +127,30 @@ fn cmd_init() -> Result<()> {
         println!("Use this token to authenticate with the web UI.");
     }
 
+    // Generate VAPID keys for web push if not already present.
+    let vapid_private = config_dir.join("vapid_private.pem");
+    if !vapid_private.exists() {
+        println!("Generating VAPID keys...");
+        let status = std::process::Command::new("openssl")
+            .args(["ecparam", "-genkey", "-name", "prime256v1", "-out"])
+            .arg(&vapid_private)
+            .status();
+        match status {
+            Ok(s) if s.success() => {
+                let _ = std::process::Command::new("openssl")
+                    .args(["ec", "-in"])
+                    .arg(&vapid_private)
+                    .args(["-pubout", "-out"])
+                    .arg(&config_dir.join("vapid_public.pem"))
+                    .status();
+                println!("VAPID keys generated.");
+            }
+            _ => {
+                println!("Warning: Failed to generate VAPID keys (openssl not found?)");
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -136,10 +178,11 @@ async fn cmd_run() -> Result<()> {
     state.ensure_access_token();
     state.save_atomic(&state_path)?;
 
-    let dispatcher = build_dispatcher(&config);
+    let state_arc = Arc::new(Mutex::new(state));
+    let dispatcher = build_dispatcher(&config, Arc::clone(&state_arc));
     let home_dir = home_dir_str()?;
 
-    let scheduler = Scheduler::new(config.clone(), state_path, state, dispatcher, home_dir);
+    let scheduler = Scheduler::new(config.clone(), state_path, state_arc, dispatcher, home_dir);
 
     let shared_state = scheduler.shared_state();
     let access_token = { shared_state.lock().await.access_token.clone() };

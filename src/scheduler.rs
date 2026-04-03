@@ -25,14 +25,14 @@ impl Scheduler {
     pub fn new(
         config: Config,
         state_path: PathBuf,
-        state: AppState,
+        state: Arc<Mutex<AppState>>,
         dispatcher: Dispatcher,
         home_dir: String,
     ) -> Self {
         Self {
             config,
             state_path,
-            state: Arc::new(Mutex::new(state)),
+            state,
             dispatcher: Arc::new(dispatcher),
             home_dir,
         }
