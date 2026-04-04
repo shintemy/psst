@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/psst_banner.png" alt="Psst — Every token counts, it counts for you." width="600" />
+  <img src="assets/psst_banner.png" alt="Psst — Every token counts, it counts for you." width="100%" />
 </p>
 
 <h1 align="center">Psst</h1>
