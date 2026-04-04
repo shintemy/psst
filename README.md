@@ -598,6 +598,10 @@ This is normal on first start. Wait for the first check cycle (up to 20 minutes)
 
 ---
 
+## Acknowledgements
+
+Psst is built on top of [tokscale](https://github.com/junhoyeo/tokscale) by [@junhoyeo](https://github.com/junhoyeo). Tokscale provides the local data parsing engine that makes it possible to read usage data from 16+ AI coding tools without any remote API calls. Thank you for the excellent work!
+
 ## License
 
 MIT

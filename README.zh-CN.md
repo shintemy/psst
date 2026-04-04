@@ -603,6 +603,10 @@ export PATH="$HOME/.cargo/bin:$PATH"
 
 ---
 
+## 致谢
+
+Psst 基于 [@junhoyeo](https://github.com/junhoyeo) 开发的 [tokscale](https://github.com/junhoyeo/tokscale) 构建。tokscale 提供了本地数据解析引擎，使 Psst 能够在不发起任何远程 API 调用的情况下，读取 16+ 种 AI 编码工具的用量数据。感谢这个优秀的开源项目！
+
 ## 许可证
 
 MIT
