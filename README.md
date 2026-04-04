@@ -36,7 +36,7 @@ Psst is a local background service that monitors your AI coding tools' usage quo
 | Tool | Data Source |
 |------|------------|
 | Claude Code | Local JSONL via tokscale-core |
-| Cursor | Local SQLite (`~/.cursor/ai-tracking/`) |
+| Cursor | Local logs via tokscale-core |
 | GitHub Copilot | Local logs via tokscale-core |
 | Codex CLI | Local JSONL via tokscale-core |
 | Gemini CLI | Local JSON via tokscale-core |
@@ -463,7 +463,7 @@ enabled = true
 
 7. Open the app from your Home Screen
 
-8. Tap the **"Enable Push Notifications"** button and allow notifications when prompted
+8. Tap the **"Enable Notifications"** button and allow notifications when prompted
 
 9. Done! Your phone will now receive push notifications even when you're away from home.
 
