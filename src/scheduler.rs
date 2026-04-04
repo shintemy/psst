@@ -5,7 +5,7 @@ use tokio::sync::Mutex;
 use tracing::{error, info, warn};
 
 use crate::config::Config;
-use crate::data_sources::claude_quota::ClaudeQuotaProvider;
+use crate::data_sources::cursor_local::CursorLocalProvider;
 use crate::data_sources::discovery::discover_tools;
 use crate::data_sources::estimated_quota::EstimatedQuotaProvider;
 use crate::data_sources::QuotaProvider;
@@ -62,11 +62,16 @@ impl Scheduler {
 
         // Collect all quota data before acquiring the state lock.
         let mut quota_results = Vec::new();
+        let mut quota_errors: Vec<(String, String)> = Vec::new();
         for provider in &providers {
             match provider.fetch_quota().await {
                 Ok(info) => quota_results.push(info),
                 Err(e) => {
                     warn!(provider = provider.provider_id(), error = %e, "Failed to fetch quota");
+                    quota_errors.push((
+                        provider.provider_id().to_string(),
+                        e.to_string(),
+                    ));
                 }
             }
         }
@@ -81,6 +86,15 @@ impl Scheduler {
             state.discovered_tools = discovered;
         }
 
+        // Record errors for providers that failed.
+        for (provider_id, error_msg) in &quota_errors {
+            let provider_state = state
+                .providers
+                .entry(provider_id.clone())
+                .or_default();
+            provider_state.last_error = Some(error_msg.clone());
+        }
+
         // Process each provider's quota info.
         for quota_info in quota_results {
             let provider_id = &quota_info.provider_id;
@@ -88,6 +102,9 @@ impl Scheduler {
                 .providers
                 .entry(provider_id.clone())
                 .or_default();
+
+            // Clear error on success.
+            provider_state.last_error = None;
 
             for window in &quota_info.windows {
                 let window_state = provider_state
@@ -142,32 +159,36 @@ impl Scheduler {
     }
 
     /// Build the list of providers based on config and discovered tools.
+    ///
+    /// Uses native local providers where available (e.g. Cursor SQLite DB),
+    /// falls back to EstimatedQuotaProvider (tokscale-core) for others.
+    /// No remote API calls are made.
     pub fn build_providers(&self) -> Vec<Box<dyn QuotaProvider>> {
         let mut providers: Vec<Box<dyn QuotaProvider>> = Vec::new();
 
-        // Claude is always checked if it appears in config or as a discovered tool.
-        let has_claude_config = self.config.providers.contains_key("claude");
-        let state_ref = &self.home_dir;
-
-        // We always try Claude (it will fail gracefully if credentials aren't present).
-        if has_claude_config || self.config.general.auto_discover {
-            providers.push(Box::new(ClaudeQuotaProvider::new(state_ref.clone())));
-        }
-
-        // Add other configured providers as EstimatedQuotaProvider.
         for (id, provider_config) in &self.config.providers {
-            if id == "claude" {
-                continue;
-            }
-            // Only include if limits are configured.
-            if provider_config.monthly_fast_requests.is_some()
-                || provider_config.daily_token_limit.is_some()
-            {
-                providers.push(Box::new(EstimatedQuotaProvider::new(
-                    id.clone(),
-                    self.home_dir.clone(),
-                    provider_config.clone(),
-                )));
+            match id.as_str() {
+                "cursor" => {
+                    if let Some(limit) = provider_config.monthly_fast_requests {
+                        let billing_day = provider_config.billing_day.unwrap_or(1);
+                        providers.push(Box::new(CursorLocalProvider::new(
+                            self.home_dir.clone(),
+                            limit,
+                            billing_day,
+                        )));
+                    }
+                }
+                _ => {
+                    if provider_config.monthly_fast_requests.is_some()
+                        || provider_config.daily_token_limit.is_some()
+                    {
+                        providers.push(Box::new(EstimatedQuotaProvider::new(
+                            id.clone(),
+                            self.home_dir.clone(),
+                            provider_config.clone(),
+                        )));
+                    }
+                }
             }
         }
 

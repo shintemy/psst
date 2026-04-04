@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::{
@@ -6,10 +7,13 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::Engine as _;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
+use crate::config::Config;
 use crate::state::{AppState, PushKeys, PushSubscription};
 
 // ── Shared application context ─────────────────────────────────────────────
@@ -18,6 +22,8 @@ use crate::state::{AppState, PushKeys, PushSubscription};
 pub struct AppContext {
     pub state: Arc<Mutex<AppState>>,
     pub access_token: Option<String>,
+    pub config_path: PathBuf,
+    pub vapid_public_key_path: PathBuf,
 }
 
 // ── Token authentication helper ────────────────────────────────────────────
@@ -162,6 +168,175 @@ pub async fn post_subscribe(
             created_at: Utc::now().to_rfc3339(),
         });
     }
+
+    (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response()
+}
+
+// ── VAPID public key ──────────────────────────────────────────────────────
+
+/// GET /api/vapid-public-key — return the VAPID public key as base64url
+///
+/// The browser needs this as `applicationServerKey` for pushManager.subscribe().
+/// We read the PEM, strip headers, decode the DER, and extract the 65-byte
+/// uncompressed EC point (the last 65 bytes of the SubjectPublicKeyInfo).
+pub async fn get_vapid_public_key(State(ctx): State<AppContext>) -> Response {
+    let pem_bytes = match std::fs::read_to_string(&ctx.vapid_public_key_path) {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::warn!(error = %e, "VAPID public key not found");
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({ "error": "VAPID keys not generated. Run `psst init`." })),
+            )
+                .into_response();
+        }
+    };
+
+    // Strip PEM headers and decode base64 to get the DER-encoded SubjectPublicKeyInfo.
+    let b64: String = pem_bytes
+        .lines()
+        .filter(|l| !l.starts_with("-----"))
+        .collect();
+    let der = match base64::engine::general_purpose::STANDARD.decode(&b64) {
+        Ok(d) => d,
+        Err(e) => {
+            tracing::warn!(error = %e, "Failed to decode VAPID public key PEM");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": "Invalid VAPID public key" })),
+            )
+                .into_response();
+        }
+    };
+
+    // For a P-256 public key the DER SubjectPublicKeyInfo is 91 bytes:
+    //   26 bytes header + 65 bytes uncompressed EC point (04 || x || y).
+    // Extract the trailing 65 bytes.
+    if der.len() < 65 {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": "VAPID public key too short" })),
+        )
+            .into_response();
+    }
+    let raw_key = &der[der.len() - 65..];
+
+    let encoded = URL_SAFE_NO_PAD.encode(raw_key);
+    Json(serde_json::json!({ "publicKey": encoded })).into_response()
+}
+
+// ── Config API ────────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct ConfigResponse {
+    providers: std::collections::HashMap<String, ProviderConfigResponse>,
+    check_interval_minutes: u32,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+struct ProviderConfigResponse {
+    monthly_fast_requests: Option<u64>,
+    billing_day: Option<u32>,
+    daily_token_limit: Option<u64>,
+}
+
+/// GET /api/config — return current provider configuration
+pub async fn get_config(
+    State(ctx): State<AppContext>,
+    Query(q): Query<TokenQuery>,
+) -> Response {
+    if !check_token(&ctx, q.token.as_deref()) {
+        return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response();
+    }
+
+    let config = match Config::load_from(&ctx.config_path) {
+        Ok(c) => c,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": format!("Failed to read config: {}", e) })),
+            )
+                .into_response();
+        }
+    };
+
+    let providers = config
+        .providers
+        .into_iter()
+        .map(|(id, pc)| {
+            (
+                id,
+                ProviderConfigResponse {
+                    monthly_fast_requests: pc.monthly_fast_requests,
+                    billing_day: pc.billing_day,
+                    daily_token_limit: pc.daily_token_limit,
+                },
+            )
+        })
+        .collect();
+
+    Json(ConfigResponse {
+        providers,
+        check_interval_minutes: config.general.check_interval_minutes,
+    })
+    .into_response()
+}
+
+#[derive(Deserialize)]
+pub struct UpdateConfigBody {
+    providers: std::collections::HashMap<String, ProviderConfigResponse>,
+}
+
+/// POST /api/config — update provider limits and save to config.toml
+pub async fn post_config(
+    State(ctx): State<AppContext>,
+    Query(q): Query<TokenQuery>,
+    Json(body): Json<UpdateConfigBody>,
+) -> Response {
+    if !check_token(&ctx, q.token.as_deref()) {
+        return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response();
+    }
+
+    // Load current config, update providers, save back.
+    let mut config = match Config::load_from(&ctx.config_path) {
+        Ok(c) => c,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": format!("Failed to read config: {}", e) })),
+            )
+                .into_response();
+        }
+    };
+
+    for (id, update) in body.providers {
+        let entry = config.providers.entry(id).or_default();
+        entry.monthly_fast_requests = update.monthly_fast_requests;
+        entry.billing_day = update.billing_day;
+        entry.daily_token_limit = update.daily_token_limit;
+    }
+
+    // Serialize and save.
+    let toml_str = match toml::to_string_pretty(&config) {
+        Ok(s) => s,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": format!("Failed to serialize config: {}", e) })),
+            )
+                .into_response();
+        }
+    };
+
+    if let Err(e) = std::fs::write(&ctx.config_path, &toml_str) {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": format!("Failed to write config: {}", e) })),
+        )
+            .into_response();
+    }
+
+    tracing::info!("Config updated via dashboard");
 
     (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response()
 }

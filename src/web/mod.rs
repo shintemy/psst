@@ -1,5 +1,6 @@
 pub mod api;
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -17,6 +18,8 @@ pub struct WebServer {
     bind: String,
     state: Arc<Mutex<AppState>>,
     access_token: Option<String>,
+    config_path: PathBuf,
+    vapid_public_key_path: PathBuf,
 }
 
 impl WebServer {
@@ -24,11 +27,15 @@ impl WebServer {
         bind: String,
         state: Arc<Mutex<AppState>>,
         access_token: Option<String>,
+        config_path: PathBuf,
+        vapid_public_key_path: PathBuf,
     ) -> Self {
         Self {
             bind,
             state,
             access_token,
+            config_path,
+            vapid_public_key_path,
         }
     }
 
@@ -36,6 +43,8 @@ impl WebServer {
         let ctx = AppContext {
             state: Arc::clone(&self.state),
             access_token: self.access_token.clone(),
+            config_path: self.config_path.clone(),
+            vapid_public_key_path: self.vapid_public_key_path.clone(),
         };
 
         let app = Router::new()
@@ -45,7 +54,9 @@ impl WebServer {
             .route("/app.js",        get(api::get_app_js))
             .route("/api/health",    get(api::get_health))
             .route("/api/status",    get(api::get_status))
+            .route("/api/config",    get(api::get_config).post(api::post_config))
             .route("/api/subscribe", post(api::post_subscribe))
+            .route("/api/vapid-public-key", get(api::get_vapid_public_key))
             .with_state(ctx);
 
         let listener = tokio::net::TcpListener::bind(&self.bind)

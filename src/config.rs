@@ -73,6 +73,19 @@ send_key = ""
 [notifications.web_push]
 enabled = true
 
+# ── Provider quota limits (estimated from local usage data) ──
+# All tools use tokscale-core local data — no remote API calls.
+# Uncomment and adjust limits for tools you want to monitor.
+
+# [providers.claude]
+# monthly_fast_requests = 1000
+# billing_day = 1
+# daily_token_limit = 500000
+
+# [providers.cursor]
+# monthly_fast_requests = 500
+# billing_day = 1
+
 [server]
 # Address to bind the web UI server
 bind = "127.0.0.1:3377"

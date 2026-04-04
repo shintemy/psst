@@ -22,6 +22,18 @@ impl TelegramNotifier {
     }
 }
 
+/// Escape special characters for Telegram MarkdownV2.
+fn escape_mdv2(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        if "_*[]()~`>#+-=|{}.!".contains(c) {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out
+}
+
 #[async_trait]
 impl Notifier for TelegramNotifier {
     async fn send(&self, notification: &Notification) -> Result<()> {
@@ -29,14 +41,16 @@ impl Notifier for TelegramNotifier {
             "https://api.telegram.org/bot{}/sendMessage",
             self.token
         );
-        let text = format!("*{}*\n\n{}", notification.title, notification.body);
-        let body = json!({
+        let title = escape_mdv2(&notification.title);
+        let body = escape_mdv2(&notification.body);
+        let text = format!("*{}*\n\n{}", title, body);
+        let payload = json!({
             "chat_id": self.chat_id,
             "text": text,
-            "parse_mode": "Markdown"
+            "parse_mode": "MarkdownV2"
         });
 
-        let response = self.client.post(&url).json(&body).send().await?;
+        let response = self.client.post(&url).json(&payload).send().await?;
 
         if !response.status().is_success() {
             let status = response.status();

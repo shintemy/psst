@@ -46,10 +46,14 @@
 
   function renderProvider(id, p) {
     const windows = Object.entries(p.windows || {});
-    if (windows.length === 0) return '';
+    const errorHtml = p.last_error
+      ? `<div class="provider-error">⚠️ ${escHtml(p.last_error)}</div>`
+      : '';
     return `
       <div class="provider-card">
         <h3 class="provider-name">${escHtml(id)}</h3>
+        ${errorHtml}
+        ${windows.length === 0 && !p.last_error ? '<p class="empty-msg">No data yet</p>' : ''}
         ${windows.map(([n, w]) => renderWindow(n, w)).join('')}
       </div>`;
   }
@@ -104,11 +108,186 @@
     }
   }
 
+  // ── Settings Panel ────────────────────────────────────────────────────────
+
+  let settingsOpen = false;
+
+  function toggleSettings() {
+    settingsOpen = !settingsOpen;
+    const panel = document.getElementById('settings-panel');
+    const btn = document.getElementById('settings-btn');
+    if (settingsOpen) {
+      panel.style.display = 'block';
+      btn.textContent = 'Hide Settings';
+      fetchConfig();
+    } else {
+      panel.style.display = 'none';
+      btn.textContent = 'Settings';
+    }
+  }
+
+  async function fetchConfig() {
+    const panel = document.getElementById('settings-panel');
+    try {
+      const res = await fetch(apiUrl('/api/config'));
+      if (!res.ok) { panel.innerHTML = '<p class="error-msg">Failed to load config</p>'; return; }
+      const data = await res.json();
+      renderSettings(data);
+    } catch (err) {
+      panel.innerHTML = '<p class="error-msg">Failed to load config</p>';
+    }
+  }
+
+  function renderSettings(data) {
+    const panel = document.getElementById('settings-panel');
+    const providers = Object.entries(data.providers || {});
+
+    let html = '<div class="settings-form">';
+    html += '<h3 class="settings-title">Provider Limits</h3>';
+    html += '<p class="settings-hint">Set your monthly request budget for each tool. Most platforms don\'t publish exact limits — set a number that matches your plan.</p>';
+
+    if (providers.length === 0) {
+      html += '<p class="empty-msg">No providers configured.</p>';
+      html += '<div class="settings-add-section">';
+      html += '<p class="settings-hint">Add a tool to monitor:</p>';
+      html += renderAddProvider();
+      html += '</div>';
+    } else {
+      for (const [id, pc] of providers) {
+        html += `
+          <div class="settings-row" data-provider="${escHtml(id)}">
+            <label class="settings-label">${escHtml(id)}</label>
+            <div class="settings-fields">
+              <div class="settings-field">
+                <span class="field-label">Monthly requests</span>
+                <input type="number" class="settings-input" data-key="monthly_fast_requests"
+                  value="${pc.monthly_fast_requests || ''}" placeholder="e.g. 1000" min="0">
+              </div>
+              <div class="settings-field">
+                <span class="field-label">Billing day</span>
+                <input type="number" class="settings-input" data-key="billing_day"
+                  value="${pc.billing_day || 1}" placeholder="1" min="1" max="28">
+              </div>
+            </div>
+          </div>`;
+      }
+      html += '<div class="settings-add-section">';
+      html += renderAddProvider();
+      html += '</div>';
+    }
+
+    html += '<div class="settings-actions">';
+    html += '<button id="save-settings-btn" class="btn-save">Save</button>';
+    html += '<span id="save-status" class="save-status"></span>';
+    html += '</div>';
+    html += '</div>';
+
+    panel.innerHTML = html;
+
+    document.getElementById('save-settings-btn').addEventListener('click', saveSettings);
+    const addBtn = document.getElementById('add-provider-btn');
+    if (addBtn) addBtn.addEventListener('click', addProvider);
+  }
+
+  function renderAddProvider() {
+    return `
+      <div class="settings-add-row">
+        <input type="text" id="new-provider-name" class="settings-input" placeholder="Tool name (e.g. windsurf)">
+        <button id="add-provider-btn" class="btn-add">+ Add</button>
+      </div>`;
+  }
+
+  function addProvider() {
+    const nameInput = document.getElementById('new-provider-name');
+    const name = (nameInput.value || '').trim().toLowerCase();
+    if (!name) return;
+
+    // Check if already exists
+    if (document.querySelector(`.settings-row[data-provider="${name}"]`)) {
+      nameInput.style.borderColor = '#ef4444';
+      return;
+    }
+
+    const addSection = document.querySelector('.settings-add-section');
+    const newRow = document.createElement('div');
+    newRow.className = 'settings-row';
+    newRow.dataset.provider = name;
+    newRow.innerHTML = `
+      <label class="settings-label">${escHtml(name)}</label>
+      <div class="settings-fields">
+        <div class="settings-field">
+          <span class="field-label">Monthly requests</span>
+          <input type="number" class="settings-input" data-key="monthly_fast_requests"
+            value="500" placeholder="e.g. 1000" min="0">
+        </div>
+        <div class="settings-field">
+          <span class="field-label">Billing day</span>
+          <input type="number" class="settings-input" data-key="billing_day"
+            value="1" placeholder="1" min="1" max="28">
+        </div>
+      </div>`;
+
+    addSection.parentNode.insertBefore(newRow, addSection);
+    nameInput.value = '';
+  }
+
+  async function saveSettings() {
+    const btn = document.getElementById('save-settings-btn');
+    const status = document.getElementById('save-status');
+    btn.disabled = true;
+    status.textContent = 'Saving…';
+    status.className = 'save-status';
+
+    const providers = {};
+    document.querySelectorAll('.settings-row').forEach(row => {
+      const id = row.dataset.provider;
+      const monthly = row.querySelector('[data-key="monthly_fast_requests"]');
+      const billing = row.querySelector('[data-key="billing_day"]');
+      providers[id] = {
+        monthly_fast_requests: monthly.value ? parseInt(monthly.value, 10) : null,
+        billing_day: billing.value ? parseInt(billing.value, 10) : 1,
+        daily_token_limit: null,
+      };
+    });
+
+    try {
+      const res = await fetch(apiUrl('/api/config'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ providers }),
+      });
+
+      if (res.ok) {
+        status.textContent = 'Saved! Changes take effect on next check cycle.';
+        status.className = 'save-status save-ok';
+      } else {
+        const err = await res.json().catch(() => ({}));
+        status.textContent = err.error || 'Save failed';
+        status.className = 'save-status save-err';
+      }
+    } catch (err) {
+      status.textContent = 'Network error';
+      status.className = 'save-status save-err';
+    }
+
+    btn.disabled = false;
+  }
+
   // ── Push Notifications ────────────────────────────────────────────────────
 
   async function registerServiceWorker() {
     if (!('serviceWorker' in navigator)) return null;
     return navigator.serviceWorker.register('/sw.js');
+  }
+
+  // Convert a base64url string to a Uint8Array (for applicationServerKey).
+  function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const raw = atob(base64);
+    const arr = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+    return arr;
   }
 
   async function subscribePush() {
@@ -133,12 +312,19 @@
         return;
       }
 
-      // Use a dummy VAPID key (real key would come from server config).
-      // For now we just store the subscription endpoint; actual push delivery
-      // requires a VAPID key pair configured in the server.
+      // Fetch the VAPID public key from the server.
+      const keyRes = await fetch('/api/vapid-public-key');
+      if (!keyRes.ok) {
+        btn.textContent = 'VAPID key unavailable';
+        btn.disabled = false;
+        return;
+      }
+      const { publicKey } = await keyRes.json();
+      const applicationServerKey = urlBase64ToUint8Array(publicKey);
+
       const subscription = await reg.pushManager.subscribe({
         userVisibleOnly: true,
-        // applicationServerKey will be provided in a future release with VAPID support
+        applicationServerKey,
       }).catch(() => null);
 
       if (!subscription) {
@@ -178,14 +364,33 @@
 
   // ── Init ──────────────────────────────────────────────────────────────────
 
+  // Check if we already have an active push subscription and update button state.
+  async function checkPushState() {
+    const btn = document.getElementById('push-btn');
+    if (!btn || !('serviceWorker' in navigator) || !('PushManager' in window)) return;
+
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) {
+        btn.textContent = 'Notifications enabled';
+        btn.classList.add('btn-success');
+        btn.disabled = true;
+      }
+    } catch (_) { /* ignore */ }
+  }
+
   function init() {
     fetchStatus();
     setInterval(fetchStatus, 60_000);
 
-    registerServiceWorker().catch(() => {});
+    registerServiceWorker().then(() => checkPushState()).catch(() => {});
 
-    const btn = document.getElementById('push-btn');
-    if (btn) btn.addEventListener('click', subscribePush);
+    const pushBtn = document.getElementById('push-btn');
+    if (pushBtn) pushBtn.addEventListener('click', subscribePush);
+
+    const settingsBtn = document.getElementById('settings-btn');
+    if (settingsBtn) settingsBtn.addEventListener('click', toggleSettings);
   }
 
   if (document.readyState === 'loading') {
