@@ -171,14 +171,13 @@
             <label class="settings-label">${escHtml(id)}</label>
             <div class="settings-fields">
               <div class="settings-field">
-                <span class="field-label">Monthly requests</span>
+                <span class="field-label">Monthly budget (requests)</span>
                 <input type="number" class="settings-input" data-key="monthly_fast_requests"
                   value="${pc.monthly_fast_requests || ''}" placeholder="e.g. 1000" min="0">
               </div>
               <div class="settings-field">
-                <span class="field-label">Billing day</span>
-                <input type="number" class="settings-input" data-key="billing_day"
-                  value="${pc.billing_day || 1}" placeholder="1" min="1" max="28">
+                <span class="field-label">Billing cycle resets on</span>
+                ${renderBillingDaySelect(pc.billing_day || 1)}
               </div>
             </div>
           </div>`;
@@ -199,6 +198,23 @@
     document.getElementById('save-settings-btn').addEventListener('click', saveSettings);
     const addBtn = document.getElementById('add-provider-btn');
     if (addBtn) addBtn.addEventListener('click', addProvider);
+  }
+
+  function renderBillingDaySelect(selected) {
+    let html = '<select class="settings-select" data-key="billing_day">';
+    for (let d = 1; d <= 28; d++) {
+      const label = d === 1 ? '1st of each month (default)'
+        : d === 2 ? '2nd of each month'
+        : d === 3 ? '3rd of each month'
+        : d === 21 ? '21st of each month'
+        : d === 22 ? '22nd of each month'
+        : d === 23 ? '23rd of each month'
+        : `${d}th of each month`;
+      const sel = d === selected ? ' selected' : '';
+      html += `<option value="${d}"${sel}>${label}</option>`;
+    }
+    html += '</select>';
+    return html;
   }
 
   function renderAddProvider() {
@@ -228,14 +244,13 @@
       <label class="settings-label">${escHtml(name)}</label>
       <div class="settings-fields">
         <div class="settings-field">
-          <span class="field-label">Monthly requests</span>
+          <span class="field-label">Monthly budget (requests)</span>
           <input type="number" class="settings-input" data-key="monthly_fast_requests"
             value="500" placeholder="e.g. 1000" min="0">
         </div>
         <div class="settings-field">
-          <span class="field-label">Billing day</span>
-          <input type="number" class="settings-input" data-key="billing_day"
-            value="1" placeholder="1" min="1" max="28">
+          <span class="field-label">Billing cycle resets on</span>
+          ${renderBillingDaySelect(1)}
         </div>
       </div>`;
 
