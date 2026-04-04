@@ -66,6 +66,14 @@ fn json_str_response(body: &'static str) -> Response {
         .into_response()
 }
 
+fn png_response(body: &'static [u8]) -> Response {
+    (
+        [(header::CONTENT_TYPE, "image/png")],
+        body,
+    )
+        .into_response()
+}
+
 // ── Route handlers ─────────────────────────────────────────────────────────
 
 /// GET / — serve dashboard HTML (token-gated)
@@ -92,6 +100,11 @@ pub async fn get_sw() -> Response {
 /// GET /app.js
 pub async fn get_app_js() -> Response {
     js_response(include_str!("static/app.js"))
+}
+
+/// GET /banner.png
+pub async fn get_banner() -> Response {
+    png_response(include_bytes!("../../assets/psst_banner.png"))
 }
 
 /// GET /api/health — liveness probe

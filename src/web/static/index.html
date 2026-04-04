@@ -3,36 +3,68 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#7c3aed" />
+  <meta name="theme-color" content="#4A5D73" />
   <title>Psst – AI Usage Monitor</title>
   <link rel="manifest" href="/manifest.json" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg:        #0f1117;
-      --surface:   #1a1d27;
-      --border:    #2a2d3e;
-      --text:      #e2e8f0;
-      --muted:     #94a3b8;
-      --accent:    #7c3aed;
-      --accent-lt: #a78bfa;
-      --green:     #22c55e;
-      --amber:     #f59e0b;
-      --red:       #ef4444;
+      /* ── Retro palette — harmonized with pixel-art banner ── */
+      --bg:         #F5F1E7;               /* warm beige */
+      --surface:    #FFFFFF;                /* white cards */
+      --surface-hi: #FAFAF6;               /* elevated surface */
+      --border:     #E0DCD2;               /* warm grey border */
+      --border-hi:  #C8C3B8;              /* hover border */
+      --text:       #2C2E33;               /* headings / primary */
+      --text-body:  #6F6F6F;               /* body text */
+      --text-dim:   #9E9A90;               /* muted text */
+      --accent:     #B85C38;               /* terracotta CTA */
+      --accent-hi:  #A04E2E;               /* darker terracotta */
+      --accent-dim: rgba(184,92,56,0.08);  /* accent tint */
+      --blue:       #4A5D73;               /* slate blue */
+      --blue-dim:   rgba(74,93,115,0.08);  /* blue tint */
+      --green:      #5B8C5A;               /* muted olive green */
+      --green-bg:   rgba(91,140,90,0.1);
+      --amber:      #C4903D;               /* warm amber */
+      --amber-bg:   rgba(196,144,61,0.1);
+      --red:        #B84233;               /* warm red */
+      --red-bg:     rgba(184,66,51,0.1);
+      --shadow:     0 1px 3px rgba(44,46,51,0.06), 0 1px 2px rgba(44,46,51,0.04);
+      --shadow-hi:  0 4px 12px rgba(44,46,51,0.08), 0 1px 3px rgba(44,46,51,0.06);
+      --radius:     4px;                   /* blocky pixel feel */
+      --radius-sm:  2px;
     }
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background: var(--bg);
-      color: var(--text);
+      color: var(--text-body);
       min-height: 100vh;
-      padding: 1.5rem 1rem 4rem;
+      padding: 0 1.25rem 4rem;
     }
 
+    /* ── Banner ── */
+
+    .banner-wrap {
+      max-width: 680px;
+      margin: 0 auto;
+      border-radius: 0 0 var(--radius) var(--radius);
+      overflow: hidden;
+      box-shadow: var(--shadow-hi);
+    }
+
+    .banner-img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    /* ── Header ── */
+
     header {
-      max-width: 720px;
-      margin: 0 auto 2rem;
+      max-width: 680px;
+      margin: 1.5rem auto 1.75rem;
       display: flex;
       align-items: flex-end;
       justify-content: space-between;
@@ -40,62 +72,129 @@
       flex-wrap: wrap;
     }
 
-    .brand h1 {
-      font-size: 1.8rem;
-      font-weight: 700;
-      color: var(--accent-lt);
-      letter-spacing: -0.5px;
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
     }
 
-    .brand p {
-      font-size: 0.85rem;
-      color: var(--muted);
-      margin-top: 2px;
+    .brand h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      color: var(--text);
+    }
+
+    .brand-tag {
+      font-size: 0.65rem;
+      font-weight: 600;
+      color: var(--blue);
+      background: var(--blue-dim);
+      border: 1px solid rgba(74,93,115,0.15);
+      border-radius: var(--radius-sm);
+      padding: 0.15rem 0.5rem;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
     }
 
     #last-updated {
-      font-size: 0.78rem;
-      color: var(--muted);
+      font-size: 0.72rem;
+      color: var(--text-dim);
       white-space: nowrap;
+      font-variant-numeric: tabular-nums;
     }
 
+    /* ── Main ── */
+
     main {
-      max-width: 720px;
+      max-width: 680px;
       margin: 0 auto;
     }
 
     .meta-row {
       display: flex;
       flex-wrap: wrap;
-      gap: 1rem;
-      font-size: 0.85rem;
-      color: var(--muted);
+      gap: 1.5rem;
+      font-size: 0.8rem;
+      color: var(--text-dim);
       margin-bottom: 1.5rem;
+      padding: 0 0.15rem;
     }
 
-    .meta-row strong { color: var(--text); }
+    .meta-row strong {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    /* ── Provider cards ── */
 
     .provider-card {
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 10px;
+      border-radius: var(--radius);
       padding: 1.25rem 1.5rem;
+      margin-bottom: 0.75rem;
+      box-shadow: var(--shadow);
+      transition: box-shadow 0.15s ease, border-color 0.15s ease;
+    }
+
+    .provider-card:hover {
+      border-color: var(--border-hi);
+      box-shadow: var(--shadow-hi);
+    }
+
+    .provider-header {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
       margin-bottom: 1rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .provider-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: var(--radius-sm);
+      background: var(--green);
+      flex-shrink: 0;
+    }
+
+    .provider-dot.has-error {
+      background: var(--amber);
     }
 
     .provider-name {
-      font-size: 1rem;
-      font-weight: 600;
-      text-transform: capitalize;
-      color: var(--accent-lt);
-      margin-bottom: 1rem;
+      font-size: 0.9rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: var(--blue);
+      letter-spacing: 0.5px;
     }
+
+    .provider-error {
+      font-size: 0.78rem;
+      color: var(--amber);
+      background: var(--amber-bg);
+      border: 1px solid rgba(196,144,61,0.2);
+      border-radius: var(--radius-sm);
+      padding: 0.45rem 0.7rem;
+      margin-bottom: 0.75rem;
+      line-height: 1.4;
+    }
+
+    /* ── Window cards ── */
 
     .window-card {
-      margin-bottom: 1rem;
+      padding: 0.7rem 0;
+      margin-bottom: 0;
+      border-bottom: 1px dashed rgba(224,220,210,0.6);
     }
 
-    .window-card:last-child { margin-bottom: 0; }
+    .window-card:last-child {
+      margin-bottom: 0;
+      border-bottom: none;
+    }
 
     .window-header {
       display: flex;
@@ -107,114 +206,181 @@
     }
 
     .window-name {
-      font-size: 0.875rem;
-      font-weight: 500;
+      font-size: 0.8rem;
+      font-weight: 600;
       color: var(--text);
-      text-transform: capitalize;
+    }
+
+    .window-name .est-badge {
+      font-size: 0.6rem;
+      font-weight: 500;
+      color: var(--text-dim);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 0.05rem 0.3rem;
+      margin-left: 0.3rem;
+      vertical-align: middle;
+      letter-spacing: 0.02em;
     }
 
     .window-detail {
-      font-size: 0.78rem;
-      color: var(--muted);
+      font-size: 0.72rem;
+      color: var(--text-dim);
+      font-variant-numeric: tabular-nums;
     }
+
+    /* ── Progress bar — blocky retro style ── */
 
     .bar-track {
       position: relative;
-      background: var(--border);
-      border-radius: 99px;
-      height: 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      height: 8px;
       overflow: hidden;
     }
 
     .bar-fill {
       height: 100%;
-      border-radius: 99px;
-      transition: width 0.4s ease;
+      border-radius: var(--radius-sm);
+      transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1);
     }
 
-    .bar-label {
-      position: absolute;
-      right: 6px;
-      top: 50%;
-      transform: translateY(-50%);
-      font-size: 0.68rem;
-      font-weight: 600;
-      color: #fff;
-      text-shadow: 0 0 4px rgba(0,0,0,0.6);
+    .bar-fill.level-ok {
+      background: var(--blue);
     }
+
+    .bar-fill.level-warn {
+      background: var(--amber);
+    }
+
+    .bar-fill.level-danger {
+      background: var(--red);
+    }
+
+    .bar-pct {
+      font-size: 0.7rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      margin-top: 3px;
+      text-align: right;
+    }
+
+    .bar-pct.level-ok    { color: var(--blue); }
+    .bar-pct.level-warn  { color: var(--amber); }
+    .bar-pct.level-danger { color: var(--red); }
 
     .window-resets {
-      font-size: 0.75rem;
-      color: var(--muted);
-      margin-top: 4px;
+      font-size: 0.68rem;
+      color: var(--text-dim);
+      margin-top: 2px;
     }
 
+    /* ── Empty & error states ── */
+
     .empty-msg, .error-msg {
-      font-size: 0.9rem;
-      color: var(--muted);
+      font-size: 0.85rem;
+      color: var(--text-dim);
       padding: 2rem 0;
       text-align: center;
     }
 
     .error-msg { color: var(--red); }
 
-    .provider-error {
-      font-size: 0.82rem;
-      color: var(--amber);
-      background: rgba(245, 158, 11, 0.08);
-      border: 1px solid rgba(245, 158, 11, 0.2);
-      border-radius: 6px;
-      padding: 0.5rem 0.75rem;
-      margin-bottom: 0.75rem;
+    /* ── Actions bar ── */
+
+    .actions {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-top: 1.5rem;
+    }
+
+    button {
+      cursor: pointer;
+      border: none;
+      border-radius: var(--radius-sm);
+      padding: 0.45rem 0.9rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      transition: all 0.12s ease;
+      letter-spacing: 0.02em;
+    }
+
+    button:disabled { opacity: 0.45; cursor: default; }
+
+    #refresh-btn, #settings-btn {
+      background: var(--surface);
+      color: var(--text-body);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+    }
+
+    #refresh-btn:hover:not(:disabled),
+    #settings-btn:hover:not(:disabled) {
+      color: var(--text);
+      border-color: var(--border-hi);
+      background: var(--surface-hi);
+    }
+
+    #push-btn {
+      background: var(--accent);
+      color: #fff;
+      border: 1px solid var(--accent-hi);
+      box-shadow: var(--shadow);
+    }
+
+    #push-btn:hover:not(:disabled) {
+      background: var(--accent-hi);
+    }
+
+    #push-btn.btn-success {
+      background: var(--green);
+      border-color: #4E7A4D;
     }
 
     /* ── Settings panel ── */
 
-    #settings-btn {
-      background: var(--surface);
-      color: var(--text);
-      border: 1px solid var(--border);
-    }
-    #settings-btn:hover:not(:disabled) { border-color: var(--accent); }
-
     #settings-panel {
-      margin-top: 1.5rem;
+      margin-top: 1.25rem;
     }
 
     .settings-form {
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 10px;
+      border-radius: var(--radius);
       padding: 1.25rem 1.5rem;
+      box-shadow: var(--shadow);
     }
 
     .settings-title {
-      font-size: 1rem;
-      font-weight: 600;
-      color: var(--accent-lt);
-      margin-bottom: 0.5rem;
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 0.3rem;
     }
 
     .settings-hint {
-      font-size: 0.8rem;
-      color: var(--muted);
-      margin-bottom: 1rem;
-      line-height: 1.4;
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      margin-bottom: 1.25rem;
+      line-height: 1.5;
     }
 
     .settings-row {
       display: flex;
       align-items: center;
       gap: 1rem;
-      padding: 0.75rem 0;
+      padding: 0.65rem 0;
       border-bottom: 1px solid var(--border);
     }
 
     .settings-row:last-of-type { border-bottom: none; }
 
     .settings-label {
-      font-size: 0.9rem;
-      font-weight: 500;
+      font-size: 0.82rem;
+      font-weight: 600;
       color: var(--text);
       text-transform: capitalize;
       min-width: 80px;
@@ -230,43 +396,38 @@
     .settings-field {
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      gap: 3px;
     }
 
     .field-label {
-      font-size: 0.7rem;
-      color: var(--muted);
+      font-size: 0.65rem;
+      font-weight: 500;
+      color: var(--text-dim);
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
     }
 
-    .settings-input {
+    .settings-input, .settings-select {
       background: var(--bg);
       border: 1px solid var(--border);
-      border-radius: 6px;
+      border-radius: var(--radius-sm);
       color: var(--text);
       padding: 0.4rem 0.6rem;
-      font-size: 0.85rem;
-      width: 140px;
+      font-size: 0.8rem;
+      transition: border-color 0.12s ease;
     }
+
+    .settings-input { width: 140px; }
+    .settings-select { width: 220px; cursor: pointer; appearance: auto; }
 
     .settings-input:focus, .settings-select:focus {
       outline: none;
       border-color: var(--accent);
-    }
-
-    .settings-select {
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      color: var(--text);
-      padding: 0.4rem 0.6rem;
-      font-size: 0.85rem;
-      width: 220px;
-      cursor: pointer;
-      appearance: auto;
+      box-shadow: 0 0 0 2px var(--accent-dim);
     }
 
     .settings-add-section {
-      padding-top: 0.75rem;
+      padding-top: 0.65rem;
     }
 
     .settings-add-row {
@@ -276,104 +437,90 @@
     }
 
     .btn-add {
-      background: var(--border);
-      color: var(--text);
-      font-size: 0.8rem;
+      background: var(--surface-hi);
+      color: var(--text-dim);
+      font-size: 0.75rem;
       padding: 0.4rem 0.8rem;
+      border: 1px solid var(--border);
       white-space: nowrap;
     }
 
-    .btn-add:hover { background: var(--accent); }
+    .btn-add:hover {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
 
     .settings-actions {
       display: flex;
       align-items: center;
       gap: 1rem;
       margin-top: 1rem;
-      padding-top: 0.75rem;
+      padding-top: 0.65rem;
       border-top: 1px solid var(--border);
     }
 
     .btn-save {
       background: var(--accent);
       color: #fff;
-      padding: 0.5rem 1.5rem;
+      padding: 0.45rem 1.25rem;
+      border: 1px solid var(--accent-hi);
     }
 
-    .btn-save:hover:not(:disabled) { opacity: 0.88; }
+    .btn-save:hover:not(:disabled) {
+      background: var(--accent-hi);
+    }
 
     .save-status {
-      font-size: 0.8rem;
-      color: var(--muted);
+      font-size: 0.75rem;
+      color: var(--text-dim);
     }
 
     .save-ok { color: var(--green); }
     .save-err { color: var(--red); }
 
-    .actions {
-      display: flex;
-      gap: 0.75rem;
-      flex-wrap: wrap;
-      margin-top: 2rem;
-    }
-
-    button {
-      cursor: pointer;
-      border: none;
-      border-radius: 8px;
-      padding: 0.55rem 1.1rem;
-      font-size: 0.875rem;
-      font-weight: 500;
-      transition: opacity 0.15s;
-    }
-
-    button:disabled { opacity: 0.55; cursor: default; }
-
-    #refresh-btn {
-      background: var(--surface);
-      color: var(--text);
-      border: 1px solid var(--border);
-    }
-
-    #refresh-btn:hover:not(:disabled) { border-color: var(--accent); }
-
-    #push-btn {
-      background: var(--accent);
-      color: #fff;
-    }
-
-    #push-btn:hover:not(:disabled) { opacity: 0.88; }
-
-    #push-btn.btn-success {
-      background: var(--green);
-    }
+    /* ── Footer ── */
 
     footer {
-      max-width: 720px;
+      max-width: 680px;
       margin: 2.5rem auto 0;
-      font-size: 0.78rem;
-      color: var(--muted);
+      font-size: 0.7rem;
+      color: var(--text-dim);
       text-align: center;
+      letter-spacing: 0.03em;
+    }
+
+    /* ── Responsive ── */
+
+    @media (max-width: 480px) {
+      body { padding: 0 0.75rem 3rem; }
+      .provider-card { padding: 1rem; }
+      .settings-fields { flex-direction: column; }
+      .settings-select { width: 100%; }
     }
   </style>
 </head>
 <body>
+  <div class="banner-wrap">
+    <img src="/banner.png" alt="Psst" class="banner-img" />
+  </div>
+
   <header>
     <div class="brand">
       <h1>Psst</h1>
-      <p>AI Coding Tool Usage Monitor</p>
+      <span class="brand-tag">monitor</span>
     </div>
     <span id="last-updated"></span>
   </header>
 
   <main>
     <div id="status-section">
-      <p class="empty-msg">Loading…</p>
+      <p class="empty-msg">Loading...</p>
     </div>
 
     <div class="actions">
       <button id="refresh-btn" onclick="location.reload()">Refresh</button>
-      <button id="push-btn">Enable Push Notifications</button>
+      <button id="push-btn">Enable Notifications</button>
       <button id="settings-btn">Settings</button>
     </div>
 
@@ -381,7 +528,7 @@
   </main>
 
   <footer>
-    Psst &mdash; auto-refreshes every 60 s
+    Psst &mdash; auto-refreshes every 60s
   </footer>
 
   <script src="/app.js"></script>

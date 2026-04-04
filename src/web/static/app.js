@@ -11,44 +11,70 @@
     return TOKEN ? `${path}?token=${encodeURIComponent(TOKEN)}` : path;
   }
 
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
+  function escHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function barLevel(pct) {
+    if (pct >= 80) return 'danger';
+    if (pct >= 50) return 'warn';
+    return 'ok';
+  }
+
+  // ── Display names ────────────────────────────────────────────────────────
+
+  const WINDOW_META = {
+    'monthly_requests': { label: 'Monthly Requests', est: false },
+    'weekly_requests':  { label: 'Weekly Budget',    est: true  },
+    'daily_requests':   { label: 'Daily Budget',     est: true  },
+    'daily_tokens':     { label: 'Daily Tokens',     est: false },
+    'five_hour':        { label: '5-Hour Window',    est: false },
+    'seven_day':        { label: '7-Day Window',     est: false },
+  };
+
+  // Sort order: monthly first, then weekly, daily, others
+  const WINDOW_ORDER = ['monthly_requests', 'weekly_requests', 'daily_requests', 'daily_tokens', 'five_hour', 'seven_day'];
+
+  function sortedWindows(entries) {
+    return entries.slice().sort((a, b) => {
+      const ia = WINDOW_ORDER.indexOf(a[0]);
+      const ib = WINDOW_ORDER.indexOf(b[0]);
+      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+    });
+  }
+
   // ── Rendering ─────────────────────────────────────────────────────────────
 
   function renderBar(pct) {
     const clamped = Math.min(100, Math.max(0, pct));
-    let color = '#22c55e'; // green
-    if (clamped >= 80) color = '#ef4444'; // red
-    else if (clamped >= 50) color = '#f59e0b'; // amber
+    const level = barLevel(pct);
     return `
       <div class="bar-track">
-        <div class="bar-fill" style="width:${clamped}%;background:${color}"></div>
-        <span class="bar-label">${Math.round(clamped)}%</span>
-      </div>`;
-  }
-
-  function windowDisplayName(name) {
-    const map = {
-      'monthly_requests': 'Monthly Requests',
-      'weekly_requests': 'Weekly Budget (est.)',
-      'daily_requests': 'Daily Budget (est.)',
-      'daily_tokens': 'Daily Tokens',
-      'five_hour': '5-Hour Window',
-      'seven_day': '7-Day Window',
-    };
-    return map[name] || name;
+        <div class="bar-fill level-${level}" style="width:${clamped}%"></div>
+      </div>
+      <div class="bar-pct level-${level}">${Math.round(pct)}%</div>`;
   }
 
   function renderWindow(name, w) {
     const pct = (w.utilization || 0) * 100;
+    const meta = WINDOW_META[name] || { label: name, est: false };
     const tokens = w.used_tokens != null ? `${w.used_tokens.toLocaleString()} tokens` : '';
     const count  = w.used_count  != null ? `${w.used_count.toLocaleString()} requests` : '';
     const detail = [tokens, count].filter(Boolean).join(' · ');
     const resets = w.resets_at
       ? `Resets ${new Date(w.resets_at).toLocaleString()}`
       : '';
+    const estBadge = meta.est ? '<span class="est-badge">est.</span>' : '';
     return `
       <div class="window-card">
         <div class="window-header">
-          <span class="window-name">${escHtml(windowDisplayName(name))}</span>
+          <span class="window-name">${escHtml(meta.label)}${estBadge}</span>
           ${detail ? `<span class="window-detail">${escHtml(detail)}</span>` : ''}
         </div>
         ${renderBar(pct)}
@@ -57,15 +83,19 @@
   }
 
   function renderProvider(id, p) {
-    const windows = Object.entries(p.windows || {});
-    const errorHtml = p.last_error
-      ? `<div class="provider-error">⚠️ ${escHtml(p.last_error)}</div>`
+    const windows = sortedWindows(Object.entries(p.windows || {}));
+    const hasError = !!p.last_error;
+    const errorHtml = hasError
+      ? `<div class="provider-error">${escHtml(p.last_error)}</div>`
       : '';
     return `
       <div class="provider-card">
-        <h3 class="provider-name">${escHtml(id)}</h3>
+        <div class="provider-header">
+          <span class="provider-dot${hasError ? ' has-error' : ''}"></span>
+          <span class="provider-name">${escHtml(id)}</span>
+        </div>
         ${errorHtml}
-        ${windows.length === 0 && !p.last_error ? '<p class="empty-msg">No data yet</p>' : ''}
+        ${windows.length === 0 && !hasError ? '<p class="empty-msg">No data yet</p>' : ''}
         ${windows.map(([n, w]) => renderWindow(n, w)).join('')}
       </div>`;
   }
@@ -86,17 +116,9 @@
         <span>Tools: <strong>${escHtml(tools)}</strong></span>
       </div>
       ${providers.length === 0
-        ? '<p class="empty-msg">No provider data yet. Waiting for first check…</p>'
+        ? '<p class="empty-msg">No provider data yet. Waiting for first check...</p>'
         : providers.map(([id, p]) => renderProvider(id, p)).join('')
       }`;
-  }
-
-  function escHtml(str) {
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
   }
 
   // ── Fetch ─────────────────────────────────────────────────────────────────
