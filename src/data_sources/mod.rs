@@ -1,4 +1,3 @@
-pub mod cursor_local;
 pub mod discovery;
 pub mod estimated_quota;
 pub mod usage_collector;

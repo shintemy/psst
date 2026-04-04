@@ -5,7 +5,6 @@ use tokio::sync::Mutex;
 use tracing::{error, info, warn};
 
 use crate::config::Config;
-use crate::data_sources::cursor_local::CursorLocalProvider;
 use crate::data_sources::discovery::discover_tools;
 use crate::data_sources::estimated_quota::EstimatedQuotaProvider;
 use crate::data_sources::QuotaProvider;
@@ -181,28 +180,14 @@ impl Scheduler {
         let mut providers: Vec<Box<dyn QuotaProvider>> = Vec::new();
 
         for (id, provider_config) in &self.config.providers {
-            match id.as_str() {
-                "cursor" => {
-                    if let Some(limit) = provider_config.monthly_fast_requests {
-                        let billing_day = provider_config.billing_day.unwrap_or(1);
-                        providers.push(Box::new(CursorLocalProvider::new(
-                            self.home_dir.clone(),
-                            limit,
-                            billing_day,
-                        )));
-                    }
-                }
-                _ => {
-                    if provider_config.monthly_fast_requests.is_some()
-                        || provider_config.daily_token_limit.is_some()
-                    {
-                        providers.push(Box::new(EstimatedQuotaProvider::new(
-                            id.clone(),
-                            self.home_dir.clone(),
-                            provider_config.clone(),
-                        )));
-                    }
-                }
+            if provider_config.monthly_fast_requests.is_some()
+                || provider_config.daily_token_limit.is_some()
+            {
+                providers.push(Box::new(EstimatedQuotaProvider::new(
+                    id.clone(),
+                    self.home_dir.clone(),
+                    provider_config.clone(),
+                )));
             }
         }
 
