@@ -76,85 +76,99 @@ impl Scheduler {
             }
         }
 
-        let mut state = self.state.lock().await;
-        state.clear_expired_windows();
+        // Collect notifications to send AFTER releasing the state lock,
+        // so the dashboard API is never blocked by slow network I/O.
+        let pending_notifications;
+        {
+            let mut state = self.state.lock().await;
+            state.clear_expired_windows();
 
-        // Auto-discover tools if enabled.
-        if self.config.general.auto_discover {
-            let discovered = discover_tools(&self.home_dir);
-            info!("Discovered tools: {:?}", discovered);
-            state.discovered_tools = discovered;
-        }
+            // Auto-discover tools if enabled.
+            if self.config.general.auto_discover {
+                let discovered = discover_tools(&self.home_dir);
+                info!("Discovered tools: {:?}", discovered);
+                state.discovered_tools = discovered;
+            }
 
-        // Record errors for providers that failed.
-        for (provider_id, error_msg) in &quota_errors {
-            let provider_state = state
-                .providers
-                .entry(provider_id.clone())
-                .or_default();
-            provider_state.last_error = Some(error_msg.clone());
-        }
+            // Record errors for providers that failed.
+            for (provider_id, error_msg) in &quota_errors {
+                let provider_state = state
+                    .providers
+                    .entry(provider_id.clone())
+                    .or_default();
+                provider_state.last_error = Some(error_msg.clone());
+            }
 
-        // Process each provider's quota info.
-        for quota_info in quota_results {
-            let provider_id = &quota_info.provider_id;
-            let provider_state = state
-                .providers
-                .entry(provider_id.clone())
-                .or_default();
+            let mut notifications = Vec::new();
 
-            // Clear error on success.
-            provider_state.last_error = None;
-
-            for window in &quota_info.windows {
-                let window_state = provider_state
-                    .windows
-                    .entry(window.name.clone())
+            // Process each provider's quota info.
+            for quota_info in quota_results {
+                let provider_id = &quota_info.provider_id;
+                let provider_state = state
+                    .providers
+                    .entry(provider_id.clone())
                     .or_default();
 
-                // Update window state from fresh quota data.
-                window_state.utilization = window.utilization;
-                window_state.resets_at = window.resets_at.map(|dt| dt.to_rfc3339());
-                window_state.used_tokens = window.used_tokens;
-                window_state.used_count = window.used_count;
+                // Clear error on success.
+                provider_state.last_error = None;
 
-                // Evaluate thresholds and collect events.
-                let events = evaluate_thresholds(
-                    provider_id,
-                    &window.name,
-                    window_state,
-                    &self.config.thresholds.usage_alerts,
-                    &self.config.thresholds.reset_alerts_hours,
-                    self.config.thresholds.skip_reset_alert_above,
-                );
+                for window in &quota_info.windows {
+                    let window_state = provider_state
+                        .windows
+                        .entry(window.name.clone())
+                        .or_default();
 
-                if !events.is_empty() {
-                    info!(
-                        provider = provider_id.as_str(),
-                        window = window.name.as_str(),
-                        count = events.len(),
-                        "Threshold events to dispatch"
+                    // Update window state from fresh quota data.
+                    window_state.utilization = window.utilization;
+                    window_state.resets_at = window.resets_at.map(|dt| dt.to_rfc3339());
+                    window_state.used_tokens = window.used_tokens;
+                    window_state.used_count = window.used_count;
+
+                    // Evaluate thresholds and collect events.
+                    let events = evaluate_thresholds(
+                        provider_id,
+                        &window.name,
+                        window_state,
+                        &self.config.thresholds.usage_alerts,
+                        &self.config.thresholds.reset_alerts_hours,
+                        self.config.thresholds.skip_reset_alert_above,
                     );
-                }
 
-                // Dispatch notifications (outside the lock to avoid holding it during I/O).
-                // We snapshot the events here and dispatch after releasing the lock below.
-                // For now dispatch while holding lock — notifiers are async and fast in practice.
-                for event in &events {
-                    let notification = format_notification(event);
-                    self.dispatcher.dispatch(&notification).await;
-                }
+                    if !events.is_empty() {
+                        info!(
+                            provider = provider_id.as_str(),
+                            window = window.name.as_str(),
+                            count = events.len(),
+                            "Threshold events to dispatch"
+                        );
+                    }
 
-                record_alerts(window_state, &events);
+                    // Snapshot notifications for dispatch after lock release.
+                    for event in &events {
+                        notifications.push(format_notification(event));
+                    }
+
+                    record_alerts(window_state, &events);
+                }
             }
-        }
 
-        state.mark_checked();
+            state.mark_checked();
 
-        if let Err(e) = state.save_atomic(&self.state_path) {
-            error!(error = %e, "Failed to save state");
-        } else {
-            info!("State saved to {}", self.state_path.display());
+            if let Err(e) = state.save_atomic(&self.state_path) {
+                error!(error = %e, "Failed to save state");
+            } else {
+                info!("State saved to {}", self.state_path.display());
+            }
+
+            pending_notifications = notifications;
+        } // ← state lock released here
+
+        // Dispatch notifications without holding the state lock.
+        if !pending_notifications.is_empty() {
+            info!(count = pending_notifications.len(), "Dispatching notifications");
+            for notification in &pending_notifications {
+                self.dispatcher.dispatch(notification).await;
+            }
         }
     }
 
