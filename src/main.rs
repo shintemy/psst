@@ -303,7 +303,15 @@ async fn cmd_run() -> Result<()> {
     } else {
         format!("http://{}", web_bind)
     };
-    println!("\n  🔗 Dashboard: {}\n", dashboard_url);
+    println!(
+        r#"
+     ▄▀▄ ▄▀▄  │
+     █ ● ● █  │
+     ▀█████▀  │
+      █████▀▀▀
+"#
+    );
+    println!("  🔗 Dashboard: {}\n", dashboard_url);
 
     let web_config_path = cfg_path.clone();
     let vapid_public_key_path = psst_config_dir()?.join("vapid_public.pem");
