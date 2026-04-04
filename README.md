@@ -36,7 +36,7 @@ Psst is a local background service that monitors your AI coding tools' usage quo
 | Tool | Data Source |
 |------|------------|
 | Claude Code | Local JSONL via tokscale-core |
-| Cursor | Local logs via tokscale-core |
+| Cursor | Local SQLite (`~/.cursor/ai-tracking/`) |
 | GitHub Copilot | Local logs via tokscale-core |
 | Codex CLI | Local JSONL via tokscale-core |
 | Gemini CLI | Local JSON via tokscale-core |
