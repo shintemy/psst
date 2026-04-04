@@ -1,5 +1,6 @@
-# Dev log (personal notes, not for open source)
+# Dev log & internal docs (personal notes, not for open source)
 dev-log.md
+docs/logic.md
 
 # Build artifacts
 /target/

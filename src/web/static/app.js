@@ -25,6 +25,18 @@
       </div>`;
   }
 
+  function windowDisplayName(name) {
+    const map = {
+      'monthly_requests': 'Monthly Requests',
+      'weekly_requests': 'Weekly Budget (est.)',
+      'daily_requests': 'Daily Budget (est.)',
+      'daily_tokens': 'Daily Tokens',
+      'five_hour': '5-Hour Window',
+      'seven_day': '7-Day Window',
+    };
+    return map[name] || name;
+  }
+
   function renderWindow(name, w) {
     const pct = (w.utilization || 0) * 100;
     const tokens = w.used_tokens != null ? `${w.used_tokens.toLocaleString()} tokens` : '';
@@ -36,7 +48,7 @@
     return `
       <div class="window-card">
         <div class="window-header">
-          <span class="window-name">${escHtml(name)}</span>
+          <span class="window-name">${escHtml(windowDisplayName(name))}</span>
           ${detail ? `<span class="window-detail">${escHtml(detail)}</span>` : ''}
         </div>
         ${renderBar(pct)}

@@ -2,6 +2,7 @@
 //!
 //! Supports:
 //! - `monthly_fast_requests`: counts messages in the current billing cycle.
+//!   Automatically derives weekly and daily request windows from the monthly budget.
 //! - `daily_token_limit`: counts tokens consumed today.
 
 use anyhow::Result;
@@ -107,6 +108,59 @@ impl QuotaProvider for EstimatedQuotaProvider {
                 used_tokens: None,
                 used_count: Some(used),
             });
+
+            // ------------------------------------------------------------------
+            // Weekly requests — estimated from monthly budget
+            // NOTE: This is a rough pacing guide, not an official provider limit.
+            // Actual provider limits (e.g. Claude) may use weighted factors
+            // (message length, tool usage, etc.) rather than simple request counts.
+            // Budget ≈ monthly / 4.33;  count = requests in last 7 days
+            // ------------------------------------------------------------------
+            let weekly_limit = (limit as f64 / 4.33).round() as u64;
+            if weekly_limit > 0 {
+                let seven_days_ago = now - Duration::days(7);
+                let weekly_summary =
+                    collect_usage_since(&self.home_dir, &self.provider_id, seven_days_ago).await?;
+                let weekly_used = weekly_summary.message_count as u64;
+                let weekly_utilization = weekly_used as f64 / weekly_limit as f64;
+
+                // Rolling window: resets 7 days from now (approximate)
+                let weekly_reset = now + Duration::days(7);
+
+                windows.push(QuotaWindow {
+                    name: "weekly_requests".to_string(),
+                    utilization: weekly_utilization,
+                    resets_at: Some(weekly_reset),
+                    used_tokens: None,
+                    used_count: Some(weekly_used),
+                });
+            }
+
+            // ------------------------------------------------------------------
+            // Daily requests — estimated from monthly budget (pacing guide)
+            // Budget ≈ monthly / 30;  count = requests today
+            // ------------------------------------------------------------------
+            let daily_limit = (limit as f64 / 30.0).round() as u64;
+            if daily_limit > 0 {
+                let daily_summary =
+                    collect_usage_today(&self.home_dir, &self.provider_id).await?;
+                let daily_used = daily_summary.message_count as u64;
+                let daily_utilization = daily_used as f64 / daily_limit as f64;
+
+                let tomorrow_midnight_req = (now + Duration::days(1))
+                    .date_naive()
+                    .and_hms_opt(0, 0, 0)
+                    .map(|dt| chrono::DateTime::<Utc>::from_naive_utc_and_offset(dt, Utc))
+                    .unwrap_or(now + Duration::days(1));
+
+                windows.push(QuotaWindow {
+                    name: "daily_requests".to_string(),
+                    utilization: daily_utilization,
+                    resets_at: Some(tomorrow_midnight_req),
+                    used_tokens: None,
+                    used_count: Some(daily_used),
+                });
+            }
         }
 
         // ------------------------------------------------------------------

@@ -56,8 +56,10 @@ fn window_display_name(window_name: &str) -> &str {
     match window_name {
         "five_hour" => "5小时窗口",
         "seven_day" => "7天窗口",
-        "monthly" => "月度配额",
-        "daily" => "日配额",
+        "monthly" | "monthly_requests" => "月度配额",
+        "weekly" | "weekly_requests" => "周预算(估算)",
+        "daily" | "daily_requests" => "日预算(估算)",
+        "daily_tokens" => "日配额",
         other => other,
     }
 }
@@ -103,10 +105,17 @@ pub fn format_notification(event: &AlertEvent) -> Notification {
         format_duration_minutes(remaining_minutes)
     });
 
+    // Build the usage detail line — handle over-100% gracefully.
+    let usage_line = if used_pct > 100 {
+        format!("当前使用率: {}%（已超出配额）", used_pct)
+    } else {
+        format!("当前使用率: {}%\n剩余: {}%", used_pct, remaining_pct)
+    };
+
     match &event.kind {
-        AlertKind::UsageThreshold(pct) => {
-            let title = format!("Psst! {} {}已用 {}%", provider, window, pct);
-            let mut body = format!("当前使用率: {}%\n剩余: {}%", used_pct, remaining_pct);
+        AlertKind::UsageThreshold(_pct) => {
+            let title = format!("Psst! {} {}已用 {}%", provider, window, used_pct);
+            let mut body = usage_line;
             if let Some(reset_str) = reset_time_str {
                 body.push_str(&format!("\n将在{}重置", reset_str));
             }
@@ -118,7 +127,6 @@ pub fn format_notification(event: &AlertEvent) -> Notification {
             }
         }
         AlertKind::ResetCountdown(hours) => {
-            // Format the countdown time label for the title
             let countdown_label = if *hours >= 24 {
                 let days = hours / 24;
                 format!("{}天", days)
@@ -126,7 +134,7 @@ pub fn format_notification(event: &AlertEvent) -> Notification {
                 format!("{}小时", hours)
             };
             let title = format!("Psst! {} {} {}后重置", provider, window, countdown_label);
-            let mut body = format!("当前使用率: {}%\n剩余: {}%", used_pct, remaining_pct);
+            let mut body = usage_line;
             if remaining_pct > 10 {
                 body.push_str("\n建议在重置前充分利用剩余额度");
             }

@@ -303,7 +303,6 @@ async fn cmd_run() -> Result<()> {
     } else {
         format!("http://{}", web_bind)
     };
-    info!("Dashboard: {}", dashboard_url);
     println!("\n  🔗 Dashboard: {}\n", dashboard_url);
 
     let web_config_path = cfg_path.clone();
