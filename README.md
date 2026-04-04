@@ -93,7 +93,7 @@ brew install openssl
 git clone --recursive https://github.com/shintemy/psst.git
 ```
 
-> The `--recursive` flag is important — it also downloads the `tokscale-core` dependency that Psst needs to parse usage data from AI tools.
+> **Important:** The `--recursive` flag downloads the [tokscale-core](https://github.com/junhoyeo/tokscale) submodule, which Psst uses to parse local usage data from AI tools. You do NOT need to install tokscale separately — it is compiled into Psst automatically during the build step.
 
 ### Step 2: Enter the project directory
 
@@ -568,6 +568,20 @@ After initialization, Psst creates the following files:
 ---
 
 ## Troubleshooting
+
+### Build fails with `tokscale-core` not found
+
+You probably cloned without the `--recursive` flag. Run this to fix it:
+
+```bash
+git submodule update --init --recursive
+```
+
+Then retry the build:
+
+```bash
+cargo install --path .
+```
 
 ### `psst: command not found`
 

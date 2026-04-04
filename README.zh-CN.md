@@ -93,7 +93,7 @@ brew install openssl
 git clone --recursive https://github.com/shintemy/psst.git
 ```
 
-> `--recursive` 参数很重要——它会同时下载 Psst 依赖的 `tokscale-core`（用于解析各工具的用量数据）。
+> **重要：** `--recursive` 参数会同时下载 [tokscale-core](https://github.com/junhoyeo/tokscale) 子模块，Psst 用它来解析各 AI 工具的本地用量数据。你**不需要**单独安装 tokscale——它会在编译时自动打包进 Psst。
 
 ### 第二步：进入项目目录
 
@@ -573,6 +573,20 @@ skip_reset_alert_above = 0.95
 ---
 
 ## 常见问题
+
+### 编译失败，提示找不到 `tokscale-core`
+
+你可能在克隆时忘记了 `--recursive` 参数。运行以下命令修复：
+
+```bash
+git submodule update --init --recursive
+```
+
+然后重新编译：
+
+```bash
+cargo install --path .
+```
 
 ### 运行 `psst` 提示 `command not found`
 
