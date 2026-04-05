@@ -82,16 +82,25 @@
       </div>`;
   }
 
+  const PROVIDER_LOGOS = {
+    'claude': '/assets/claude.svg',
+    'cursor': '/assets/cursor.svg',
+  };
+
   function renderProvider(id, p) {
     const windows = sortedWindows(Object.entries(p.windows || {}));
     const hasError = !!p.last_error;
     const errorHtml = hasError
       ? `<div class="provider-error">${escHtml(p.last_error)}</div>`
       : '';
+    const logoSrc = PROVIDER_LOGOS[id.toLowerCase()];
+    const logoHtml = logoSrc
+      ? `<img src="${logoSrc}" alt="" class="provider-logo" />`
+      : '';
     return `
       <div class="provider-card">
         <div class="provider-header">
-          <span class="provider-dot${hasError ? ' has-error' : ''}"></span>
+          ${logoHtml || `<span class="provider-dot${hasError ? ' has-error' : ''}"></span>`}
           <span class="provider-name">${escHtml(id)}</span>
         </div>
         ${errorHtml}
@@ -117,7 +126,7 @@
       </div>
       ${providers.length === 0
         ? '<p class="empty-msg">No provider data yet. Waiting for first check...</p>'
-        : providers.map(([id, p]) => renderProvider(id, p)).join('')
+        : '<div class="providers-grid">' + providers.map(([id, p]) => renderProvider(id, p)).join('') + '</div>'
       }`;
   }
 
@@ -182,10 +191,6 @@
 
     if (providers.length === 0) {
       html += '<p class="empty-msg">No providers configured.</p>';
-      html += '<div class="settings-add-section">';
-      html += '<p class="settings-hint">Add a tool to monitor:</p>';
-      html += renderAddProvider();
-      html += '</div>';
     } else {
       for (const [id, pc] of providers) {
         html += `
@@ -204,9 +209,6 @@
             </div>
           </div>`;
       }
-      html += '<div class="settings-add-section">';
-      html += renderAddProvider();
-      html += '</div>';
     }
 
     html += '<div class="settings-actions">';

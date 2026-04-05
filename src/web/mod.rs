@@ -58,6 +58,8 @@ impl WebServer {
             .route("/api/subscribe", post(api::post_subscribe))
             .route("/api/vapid-public-key", get(api::get_vapid_public_key))
             .route("/banner.png",        get(api::get_banner))
+            .route("/assets/claude.svg", get(api::get_claude_svg))
+            .route("/assets/cursor.svg", get(api::get_cursor_svg))
             .with_state(ctx);
 
         let listener = tokio::net::TcpListener::bind(&self.bind)

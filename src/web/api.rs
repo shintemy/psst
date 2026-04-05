@@ -74,6 +74,14 @@ fn png_response(body: &'static [u8]) -> Response {
         .into_response()
 }
 
+fn svg_response(body: &'static [u8]) -> Response {
+    (
+        [(header::CONTENT_TYPE, "image/svg+xml")],
+        body,
+    )
+        .into_response()
+}
+
 // ── Route handlers ─────────────────────────────────────────────────────────
 
 /// GET / — serve dashboard HTML (token-gated)
@@ -105,6 +113,16 @@ pub async fn get_app_js() -> Response {
 /// GET /banner.png
 pub async fn get_banner() -> Response {
     png_response(include_bytes!("../../assets/psst_banner.png"))
+}
+
+/// GET /assets/claude.svg
+pub async fn get_claude_svg() -> Response {
+    svg_response(include_bytes!("../../assets/Claude.svg"))
+}
+
+/// GET /assets/cursor.svg
+pub async fn get_cursor_svg() -> Response {
+    svg_response(include_bytes!("../../assets/Cursor.svg"))
 }
 
 /// GET /api/health — liveness probe
