@@ -222,6 +222,10 @@ billing_day = 1
 psst run
 ```
 
+<p align="center">
+  <img src="assets/showcase.png" alt="psst run 终端输出" width="600" />
+</p>
+
 启动后会看到类似输出：
 
 ```

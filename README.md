@@ -218,6 +218,10 @@ Save and close the file.
 psst run
 ```
 
+<p align="center">
+  <img src="assets/showcase.png" alt="psst run terminal output" width="600" />
+</p>
+
 You will see output like:
 
 ```
