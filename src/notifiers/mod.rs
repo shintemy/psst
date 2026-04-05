@@ -39,12 +39,22 @@ impl Dispatcher {
     pub async fn dispatch(&self, notification: &Notification) {
         for notifier in &self.notifiers {
             if notifier.is_enabled() {
-                if let Err(e) = notifier.send(notification).await {
-                    tracing::warn!(
-                        notifier = notifier.name(),
-                        error = %e,
-                        "Failed to send notification"
-                    );
+                match notifier.send(notification).await {
+                    Ok(()) => {
+                        tracing::info!(
+                            notifier = notifier.name(),
+                            title = notification.title.as_str(),
+                            "Notification sent"
+                        );
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            notifier = notifier.name(),
+                            title = notification.title.as_str(),
+                            error = %e,
+                            "Failed to send notification"
+                        );
+                    }
                 }
             }
         }

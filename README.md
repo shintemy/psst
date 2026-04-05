@@ -1,11 +1,11 @@
 <p align="center">
-  <img src="assets/psst_banner.png" alt="Psst — Every token counts, it counts for you." width="100%" />
+  <img src="assets/psst_banner.png" alt="Psst — Keep your agent smokin', use up every token." width="100%" />
 </p>
 
 <h1 align="center">Psst</h1>
 
 <p align="center">
-  <em>Every token counts, it counts for you.</em>
+  <em>Keep your agent smokin', use up every token.</em>
 </p>
 
 <p align="center">
@@ -26,7 +26,7 @@ Psst is a local background service that monitors your AI coding tools' usage quo
 
 - **Auto-discovery** — Automatically detects AI coding tools installed on your machine
 - **16+ tools supported** — Claude Code, Cursor, Copilot, Codex CLI, Gemini CLI, Windsurf, Amp, and more
-- **4 notification channels** — macOS desktop, Telegram, ServerChan (WeChat), PWA Web Push (mobile)
+- **Multiple notification channels** — macOS desktop, Telegram, and more
 - **Smart alerts** — Warns at 50%/80% usage; countdowns at 24h/12h/1h before quota reset
 - **Web dashboard** — View usage and edit settings from your browser
 - **Fully local** — All usage data is read from local files (only notifications go to external services)
@@ -326,20 +326,23 @@ psst uninstall
 
 ## Notification Channels
 
-Psst supports 4 notification channels. You can enable any combination of them.
+| Channel | Status | Setup |
+|---------|--------|-------|
+| macOS Desktop | Enabled by default | Ensure **System Settings → Notifications → Script Editor** is turned on |
+| Telegram | Requires config | See below |
 
 All notification settings are in `~/.config/psst/config.toml`.
 
 ### 1. macOS Desktop Notifications
 
-**Enabled by default.** No setup needed.
-
-Shows native macOS notification banners when alerts trigger.
+**Enabled by default.** Uses `osascript` to send native macOS notifications.
 
 ```toml
 [notifications]
 desktop = true    # Set to false to disable
 ```
+
+> **Note:** Notifications are delivered via Script Editor. Make sure notifications for **Script Editor** are enabled in **System Settings → Notifications**. If notifications don't appear, check this setting first.
 
 ### 2. Telegram
 
@@ -399,79 +402,6 @@ psst test-notify
 ```
 
 You should receive a test message from your bot in Telegram.
-
-### 3. ServerChan (Server酱 — WeChat)
-
-Send alerts to your WeChat via the ServerChan service.
-
-#### Step 1: Get a SendKey
-
-1. Visit [sct.ftqq.com](https://sct.ftqq.com/)
-2. Log in with your GitHub account
-3. Go to "SendKey" page and copy your key
-
-#### Step 2: Add to config
-
-```toml
-[notifications.serverchan]
-enabled = true
-send_key = "YOUR_SEND_KEY_HERE"
-```
-
-#### Step 3: Test it
-
-```bash
-psst test-notify
-```
-
-### 4. PWA Web Push (Mobile Push Notifications)
-
-Send push notifications to your phone — works on iOS (16.4+) and Android, no app install required.
-
-**Enabled by default.**
-
-```toml
-[notifications.web_push]
-enabled = true
-```
-
-#### Setup on iPhone
-
-1. Make sure your phone and computer are on the **same Wi-Fi network**
-2. Find your computer's local IP address:
-   ```bash
-   # On macOS:
-   ipconfig getifaddr en0
-   ```
-   This will print something like `192.168.1.100`.
-
-3. Change Psst's bind address to allow network access. Edit `~/.config/psst/config.toml`:
-   ```toml
-   [server]
-   bind = "0.0.0.0:3377"    # Listen on all interfaces (was 127.0.0.1)
-   ```
-
-4. Restart Psst if it's running (`Ctrl+C`, then `psst run`)
-
-5. On your iPhone, open **Safari** and go to:
-   ```
-   http://192.168.1.100:3377?token=YOUR_ACCESS_TOKEN
-   ```
-   (Replace the IP and token with your actual values. The token was shown when you ran `psst init`.)
-
-6. Tap the **Share** button (square with arrow) → **Add to Home Screen** → **Add**
-
-7. Open the app from your Home Screen
-
-8. Tap the **"Enable Notifications"** button and allow notifications when prompted
-
-9. Done! Your phone will now receive push notifications even when you're away from home.
-
-#### Setup on Android
-
-Same steps, but use Chrome instead of Safari. Chrome supports PWA push notifications natively.
-
-> **Note:** After the initial setup, your phone does NOT need to be on the same network as your computer. Notifications are delivered through Apple/Google's push services.
 
 ---
 
@@ -559,8 +489,7 @@ After initialization, Psst creates the following files:
 | Language | Rust |
 | Async runtime | tokio |
 | Web server | axum (port 3377) |
-| Desktop notifications | notify-rust |
-| Mobile push | web-push crate (VAPID / AES-128-GCM) |
+| Desktop notifications | osascript (macOS native) |
 | Local data parsing | tokscale-core |
 | Configuration | TOML |
 | State storage | JSON (atomic writes) |
@@ -602,13 +531,6 @@ This is normal on first start. Wait for the first check cycle (up to 20 minutes)
 1. Make sure you sent a message to your bot first (the bot can't initiate a chat)
 2. Double-check `bot_token` and `chat_id` in config.toml
 3. Run `psst test-notify` and check the terminal output for error messages
-
-### Web Push not working on iPhone
-
-1. iOS 16.4 or later is required
-2. You must use **Safari** to add the page to your Home Screen
-3. You must open the app **from the Home Screen icon** (not from Safari)
-4. Make sure you tapped "Allow" when the notification permission prompt appeared
 
 ---
 
