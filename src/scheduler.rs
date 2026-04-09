@@ -5,6 +5,7 @@ use tokio::sync::Mutex;
 use tracing::{error, info, warn};
 
 use crate::config::Config;
+use crate::data_sources::cursor_api::CursorApiProvider;
 use crate::data_sources::cursor_local::CursorLocalProvider;
 use crate::data_sources::discovery::discover_tools;
 use crate::data_sources::estimated_quota::EstimatedQuotaProvider;
@@ -112,6 +113,13 @@ impl Scheduler {
                 // Clear error on success.
                 provider_state.last_error = None;
 
+                // Remove stale windows no longer reported by the provider.
+                let reported_names: std::collections::HashSet<&str> =
+                    quota_info.windows.iter().map(|w| w.name.as_str()).collect();
+                provider_state
+                    .windows
+                    .retain(|name, _| reported_names.contains(name.as_str()));
+
                 for window in &quota_info.windows {
                     let window_state = provider_state
                         .windows
@@ -183,10 +191,19 @@ impl Scheduler {
         for (id, provider_config) in &self.config.providers {
             match id.as_str() {
                 "cursor" => {
-                    // tokscale-core marks Cursor as parse_local: false,
-                    // so EstimatedQuotaProvider returns 0. Use the native
-                    // SQLite provider which reads ~/.cursor/ai-tracking/.
-                    if let Some(limit) = provider_config.monthly_fast_requests {
+                    // Try the API provider first (reads JWT from Cursor IDE's
+                    // local state.vscdb for exact billing percentages).
+                    // Fall back to SQLite request counting if Cursor IDE
+                    // credentials are not available.
+                    let api_available =
+                        crate::data_sources::cursor_api::read_cursor_tokens(&self.home_dir)
+                            .is_ok();
+
+                    if api_available {
+                        providers.push(Box::new(CursorApiProvider::new(
+                            self.home_dir.clone(),
+                        )));
+                    } else if let Some(limit) = provider_config.monthly_fast_requests {
                         let billing_day = provider_config.billing_day.unwrap_or(1);
                         providers.push(Box::new(CursorLocalProvider::new(
                             self.home_dir.clone(),
