@@ -1,3 +1,4 @@
+pub mod cursor_api;
 pub mod cursor_local;
 pub mod discovery;
 pub mod estimated_quota;
