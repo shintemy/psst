@@ -9,6 +9,7 @@ use anyhow::{Context, Result};
 use std::path::PathBuf;
 
 /// JWT credentials read from Cursor's state.vscdb.
+#[derive(Debug, Clone)]
 pub struct CursorTokens {
     pub access_token: String,
     pub refresh_token: String,
