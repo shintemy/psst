@@ -115,8 +115,7 @@ pub fn parse_refresh_response(body: &str) -> Result<String> {
 
 /// Refresh the access token using the refresh token.
 /// Returns the new access token on success.
-pub async fn refresh_access_token(refresh_token: &str) -> Result<String> {
-    let client = reqwest::Client::new();
+pub async fn refresh_access_token(client: &reqwest::Client, refresh_token: &str) -> Result<String> {
     let resp = client
         .post(OAUTH_TOKEN_URL)
         .json(&serde_json::json!({
@@ -139,6 +138,7 @@ pub async fn refresh_access_token(refresh_token: &str) -> Result<String> {
 }
 
 /// Parsed usage data from the Cursor API.
+#[derive(Debug)]
 pub struct CursorUsage {
     pub total_percent: f64,
     pub auto_percent: f64,
@@ -211,7 +211,7 @@ impl CursorApiProvider {
         }
 
         tracing::info!("Cursor access token expired, refreshing via OAuth");
-        refresh_access_token(&tokens.refresh_token).await
+        refresh_access_token(&self.client, &tokens.refresh_token).await
     }
 
     /// Call the GetCurrentPeriodUsage endpoint.
