@@ -31,6 +31,8 @@
 
   const WINDOW_META = {
     'monthly_requests': { label: 'Monthly Requests', est: false },
+    'auto_requests':    { label: 'Auto Models',      est: false },
+    'api_requests':     { label: 'API Models',       est: false },
     'weekly_requests':  { label: 'Weekly Budget',    est: true  },
     'daily_requests':   { label: 'Daily Budget',     est: true  },
     'daily_tokens':     { label: 'Daily Tokens',     est: false },
@@ -38,8 +40,8 @@
     'seven_day':        { label: '7-Day Window',     est: false },
   };
 
-  // Sort order: monthly first, then weekly, daily, others
-  const WINDOW_ORDER = ['monthly_requests', 'weekly_requests', 'daily_requests', 'daily_tokens', 'five_hour', 'seven_day'];
+  // Sort order: monthly first, then auto/api, weekly, daily, others
+  const WINDOW_ORDER = ['monthly_requests', 'auto_requests', 'api_requests', 'weekly_requests', 'daily_requests', 'daily_tokens', 'five_hour', 'seven_day'];
 
   function sortedWindows(entries) {
     return entries.slice().sort((a, b) => {

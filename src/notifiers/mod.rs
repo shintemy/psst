@@ -67,6 +67,8 @@ fn window_display_name(window_name: &str) -> &str {
         "five_hour" => "5小时窗口",
         "seven_day" => "7天窗口",
         "monthly" | "monthly_requests" => "月度配额",
+        "auto_requests" => "Auto模型配额",
+        "api_requests" => "API模型配额",
         "weekly" | "weekly_requests" => "周预算(估算)",
         "daily" | "daily_requests" => "日预算(估算)",
         "daily_tokens" => "日配额",
