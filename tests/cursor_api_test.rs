@@ -73,3 +73,37 @@ fn test_parse_refresh_response_logout() {
     let result = parse_refresh_response(body);
     assert!(result.is_err());
 }
+
+use psst::data_sources::cursor_api::parse_usage_response;
+
+#[test]
+fn test_parse_usage_response() {
+    let body = r#"{
+        "billingCycleStart": "1773133068000",
+        "billingCycleEnd": "1775811468000",
+        "planUsage": {
+            "totalSpend": 10455,
+            "includedSpend": 10455,
+            "remaining": 29545,
+            "limit": 40000,
+            "autoPercentUsed": 0.175,
+            "apiPercentUsed": 20.56,
+            "totalPercentUsed": 6.97
+        },
+        "enabled": true,
+        "displayMessage": "You've used 26% of your included usage"
+    }"#;
+
+    let usage = parse_usage_response(body).unwrap();
+    assert!((usage.total_percent - 6.97).abs() < 0.01);
+    assert!((usage.auto_percent - 0.175).abs() < 0.01);
+    assert!((usage.api_percent - 20.56).abs() < 0.01);
+    assert_eq!(usage.billing_cycle_end_ms, 1775811468000);
+}
+
+#[test]
+fn test_parse_usage_response_missing_plan_usage() {
+    let body = r#"{"billingCycleStart":"0","billingCycleEnd":"0","enabled":false}"#;
+    let result = parse_usage_response(body);
+    assert!(result.is_err());
+}

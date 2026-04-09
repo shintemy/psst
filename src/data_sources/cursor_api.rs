@@ -6,9 +6,13 @@
 //! for exact billing-cycle usage percentages.
 
 use anyhow::{Context, Result};
+use async_trait::async_trait;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine as _;
+use chrono::TimeZone;
 use std::path::PathBuf;
+
+use super::{QuotaInfo, QuotaProvider, QuotaWindow};
 
 /// JWT credentials read from Cursor's state.vscdb.
 #[derive(Debug, Clone)]
@@ -132,4 +136,153 @@ pub async fn refresh_access_token(refresh_token: &str) -> Result<String> {
     }
 
     parse_refresh_response(&body)
+}
+
+/// Parsed usage data from the Cursor API.
+pub struct CursorUsage {
+    pub total_percent: f64,
+    pub auto_percent: f64,
+    pub api_percent: f64,
+    pub billing_cycle_end_ms: i64,
+}
+
+const USAGE_URL: &str =
+    "https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage";
+
+/// Parse the GetCurrentPeriodUsage JSON response.
+pub fn parse_usage_response(body: &str) -> Result<CursorUsage> {
+    let data: serde_json::Value =
+        serde_json::from_str(body).context("Invalid JSON in usage response")?;
+
+    let plan = data
+        .get("planUsage")
+        .context("No planUsage in usage response")?;
+
+    let total_percent = plan
+        .get("totalPercentUsed")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
+    let auto_percent = plan
+        .get("autoPercentUsed")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
+    let api_percent = plan
+        .get("apiPercentUsed")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
+
+    // billingCycleEnd comes as a string of milliseconds (e.g. "1775811468000")
+    let billing_cycle_end_ms = data
+        .get("billingCycleEnd")
+        .and_then(|v| {
+            v.as_str()
+                .and_then(|s| s.parse::<i64>().ok())
+                .or_else(|| v.as_i64())
+        })
+        .unwrap_or(0);
+
+    Ok(CursorUsage {
+        total_percent,
+        auto_percent,
+        api_percent,
+        billing_cycle_end_ms,
+    })
+}
+
+pub struct CursorApiProvider {
+    home_dir: String,
+    client: reqwest::Client,
+}
+
+impl CursorApiProvider {
+    pub fn new(home_dir: impl Into<String>) -> Self {
+        Self {
+            home_dir: home_dir.into(),
+            client: reqwest::Client::new(),
+        }
+    }
+
+    /// Get a valid access token, refreshing if needed.
+    async fn get_access_token(&self) -> Result<String> {
+        let tokens = read_cursor_tokens(&self.home_dir)?;
+
+        if !is_token_expired(&tokens.access_token) {
+            return Ok(tokens.access_token);
+        }
+
+        tracing::info!("Cursor access token expired, refreshing via OAuth");
+        refresh_access_token(&tokens.refresh_token).await
+    }
+
+    /// Call the GetCurrentPeriodUsage endpoint.
+    async fn fetch_usage(&self, access_token: &str) -> Result<CursorUsage> {
+        let resp = self
+            .client
+            .post(USAGE_URL)
+            .header("Authorization", format!("Bearer {}", access_token))
+            .header("Content-Type", "application/json")
+            .body("{}")
+            .send()
+            .await
+            .context("Failed to reach Cursor usage API")?;
+
+        let status = resp.status();
+        let body = resp
+            .text()
+            .await
+            .context("Failed to read usage response body")?;
+
+        if !status.is_success() {
+            anyhow::bail!("Cursor usage API returned HTTP {}: {}", status, body);
+        }
+
+        parse_usage_response(&body)
+    }
+}
+
+#[async_trait]
+impl QuotaProvider for CursorApiProvider {
+    fn provider_id(&self) -> &str {
+        "cursor"
+    }
+
+    async fn fetch_quota(&self) -> Result<QuotaInfo> {
+        let token = self.get_access_token().await?;
+        let usage = self.fetch_usage(&token).await?;
+
+        let resets_at = if usage.billing_cycle_end_ms > 0 {
+            chrono::Utc
+                .timestamp_millis_opt(usage.billing_cycle_end_ms)
+                .single()
+        } else {
+            None
+        };
+
+        Ok(QuotaInfo {
+            provider_id: "cursor".to_string(),
+            windows: vec![
+                QuotaWindow {
+                    name: "monthly_requests".to_string(),
+                    utilization: usage.total_percent / 100.0,
+                    resets_at,
+                    used_tokens: None,
+                    used_count: None,
+                },
+                QuotaWindow {
+                    name: "auto_requests".to_string(),
+                    utilization: usage.auto_percent / 100.0,
+                    resets_at,
+                    used_tokens: None,
+                    used_count: None,
+                },
+                QuotaWindow {
+                    name: "api_requests".to_string(),
+                    utilization: usage.api_percent / 100.0,
+                    resets_at,
+                    used_tokens: None,
+                    used_count: None,
+                },
+            ],
+        })
+    }
 }
